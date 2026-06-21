@@ -834,18 +834,25 @@
                            (maxCount - minCount)) * 28);
                 };
 
+                // All vivid — no white/grey (invisible on the light theme).
                 const colors = [
-                    '#5EEAD4', '#34D399', '#60A5FA', '#F472B6',
-                    '#FBBF24', '#A78BFA', '#FB923C', '#ffffff', '#9ca3af'
+                    '#5EEAD4',  // jade
+                    '#34D399',  // emerald
+                    '#60A5FA',  // blue
+                    '#F472B6',  // pink
+                    '#FBBF24',  // amber/gold
+                    '#A78BFA',  // purple
+                    '#FB923C',  // orange
+                    '#F87171',  // coral/red
+                    '#38BDF8',  // sky blue
+                    '#4ADE80',  // green
+                    '#E879F9',  // fuchsia
+                    '#FCD34D',  // yellow
                 ];
 
-                const getColor = (index) => {
-                    if (index === 0) return colors[0];
-                    if (index < 3) return colors[1];
-                    if (index < 8) return colors[Math.floor(index % 6) + 1];
-                    if (index < 20) return colors[7];
-                    return colors[8];
-                };
+                // Cycle through the palette so every word gets a distinct color.
+                // Top 3 land on jade/emerald/blue (the first 3) by virtue of index.
+                const getColor = (index) => colors[index % colors.length];
 
                 // PHASE 1: measure every word's real dimensions off-screen.
                 const measureDiv = document.createElement('div');
@@ -903,15 +910,28 @@
                     span.addEventListener('click', () =>
                         this.showTooltip(span, `"${item.word}" — said ${item.count} times`));
 
-                    // Try 300 random positions across the FULL container.
-                    let x = W / 2, y = H / 2; // fallback center
-                    for (let attempt = 0; attempt < 300; attempt++) {
+                    // Try random positions across the FULL container — give wide
+                    // words (hardest to place) more attempts.
+                    const maxAttempts = w > 100 ? 500 : 300;
+                    let x, y, found = false;
+                    for (let attempt = 0; attempt < maxAttempts; attempt++) {
                         const tx = Math.random() * Math.max(1, W - w - 16) + 8;
                         const ty = Math.random() * Math.max(1, H - h - 10) + 5;
                         if (!overlaps(tx, ty, w, h)) {
                             x = tx; y = ty;
+                            found = true;
                             break;
                         }
+                    }
+
+                    // Fallback: place near a random edge instead of the center,
+                    // so failed placements don't pile up in the middle.
+                    if (!found) {
+                        const edge = Math.floor(Math.random() * 4);
+                        if (edge === 0) { x = Math.random() * (W / 3); y = Math.random() * H * 0.8; }
+                        else if (edge === 1) { x = W - w - Math.random() * (W / 3); y = Math.random() * H * 0.8; }
+                        else if (edge === 2) { x = Math.random() * W * 0.8; y = Math.random() * (H / 4); }
+                        else { x = Math.random() * W * 0.8; y = H - h - Math.random() * (H / 4); }
                     }
 
                     span.style.left = x + 'px';
