@@ -87,6 +87,8 @@ WORD_STOPWORDS = frozenset({
     'bro', 'sha', 'one', 'two', 'lot',
     'tell', 'told', 'want', 'need', 'make', 'made', 'take',
     'took', 'give', 'gave', 'put', 'set', 'let', 'us',
+    'dey', 'didnt', 'understand', 'trying', 'something',
+    'anything', 'everything', 'nothing', 'someone',
 })
 
 # WhatsApp/export artifacts that slip through when media placeholders or deleted
