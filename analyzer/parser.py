@@ -62,6 +62,89 @@ def compute_word_histogram(msgs_A, msgs_B):
     return [bin_counts(msgs_A), bin_counts(msgs_B)]
 
 
+# Common words that carry no signal in a "most used words" cloud. Kept as a
+# frozenset for O(1) membership tests in the hot tokenising loop.
+WORD_STOPWORDS = frozenset({
+    'i', 'me', 'my', 'the', 'a', 'an', 'and', 'or', 'but', 'in',
+    'on', 'at', 'to', 'for', 'of', 'with', 'is', 'was', 'are',
+    'were', 'be', 'been', 'have', 'has', 'had', 'do', 'did', 'will',
+    'would', 'could', 'should', 'may', 'might', 'shall', 'can',
+    'it', 'its', 'this', 'that', 'these', 'those', 'he', 'she',
+    'they', 'we', 'you', 'your', 'his', 'her', 'their', 'our',
+    'what', 'which', 'who', 'when', 'where', 'how', 'why',
+    'so', 'if', 'then', 'than', 'because', 'as', 'up', 'out',
+    'about', 'just', 'like', 'not', 'no', 'yes', 'ok', 'okay',
+    'lol', 'oh', 'ah', 'um', 'uh', 'na', 'de', 'la', 'el',
+    'im', 'ive', 'dont', 'cant', 'wont', 'thats',
+    'also', 'too', 'very', 'much', 'more', 'some', 'any',
+    'all', 'now', 'get', 'got', 'know', 'think', 'said',
+    'say', 'go', 'going', 'come', 'came', 'see', 'seen',
+    'good', 'great', 'really', 'still', 'back', 'even', 'never',
+    'am', 'pm', 'ill', 'id', 'hed', 'shed', 'wed', 'theyd',
+    'youre', 'theyre', 'weve', 'youve',
+    'via', 'per', 'eg', 'ie', 'etc', 'hi', 'hey', 'haha',
+    'hahaha', 'lmao', 'lmfao', 'smh', 'tbh', 'imo', 'fr',
+    'bro', 'sha', 'one', 'two', 'lot',
+    'tell', 'told', 'want', 'need', 'make', 'made', 'take',
+    'took', 'give', 'gave', 'put', 'set', 'let', 'us',
+})
+
+# WhatsApp/export artifacts that slip through when media placeholders or deleted
+# notices leave residual text — never real vocabulary.
+WORD_ARTIFACTS = frozenset({'omitted', 'message', 'deleted'})
+
+# Runs of letters/digits after apostrophes are stripped (so "don't" → "dont",
+# matching the no-apostrophe contraction stopwords above).
+_WORD_TOKEN_RE = re.compile(r"[a-z0-9]+")
+
+
+def _word_tokens(text):
+    """Yield cleaned, meaningful word tokens from `text`: lowercased, punctuation
+    and apostrophes stripped, with stopwords / artifacts / <2-char / pure-number
+    tokens filtered out."""
+    text = text.lower().replace("'", "").replace("’", "")
+    for w in _WORD_TOKEN_RE.findall(text):
+        if len(w) < 2 or w.isdigit():
+            continue
+        if w in WORD_STOPWORDS or w in WORD_ARTIFACTS:
+            continue
+        yield w
+
+
+def compute_word_frequencies(messages, participants, top_n=50, overall=False,
+                             overall_n=100):
+    """Most-used words per participant (stopwords removed).
+
+    Returns:
+      {
+        'per_participant': {name: [{'word': w, 'count': n}, ...top_n]},
+        'overall': [{'word': w, 'count': n}, ...overall_n]   # [] unless overall
+      }
+    `overall` (groups) also returns the merged top words across everyone.
+    """
+    counters = {p: Counter() for p in participants}
+    for m in messages:
+        c = counters.get(m['sender'])
+        if c is None:
+            c = counters[m['sender']] = Counter()
+        for w in _word_tokens(m['text']):
+            c[w] += 1
+
+    per_participant = {
+        name: [{'word': w, 'count': n} for w, n in c.most_common(top_n)]
+        for name, c in counters.items()
+    }
+
+    overall_list = []
+    if overall:
+        merged = Counter()
+        for c in counters.values():
+            merged.update(c)
+        overall_list = [{'word': w, 'count': n} for w, n in merged.most_common(overall_n)]
+
+    return {'per_participant': per_participant, 'overall': overall_list}
+
+
 def compute_question_ratio(msgs_A, msgs_B):
     """Percentage of messages that are questions"""
     def is_question(text):
@@ -575,6 +658,26 @@ SYSTEM_MSG_RE = re.compile(
     re.IGNORECASE
 )
 
+# GROUP-SPECIFIC system events only. Unlike SYSTEM_MSG_RE this deliberately
+# EXCLUDES events that also occur in 1:1 chats ("security code changed",
+# "changed their phone number", "changed to"). The presence of any of these is a
+# strong signal the export is a group chat — used by detect_chat_type() so a group
+# in which only two people ever spoke is still recognised as a group.
+GROUP_EVENT_RE = re.compile(
+    r'\b(?:'
+    r'created (?:this )?group'
+    r'|added'
+    r'|removed'
+    r'|left'
+    r'|joined'
+    r'|changed the subject'
+    r'|changed this group'
+    r"|changed the group(?:'s)? (?:icon|description|settings|name)"
+    r'|you were added'
+    r')\b',
+    re.IGNORECASE
+)
+
 # Any line that begins with a date stamp. Used to recognise dated lines that did
 # NOT match a sender pattern — those are system notifications, not continuations.
 DATED_LINE_RE = re.compile(r'^\[?\d{1,2}/\d{1,2}/\d{2,4}[,.\s]')
@@ -679,6 +782,7 @@ def parse_whatsapp_file(content):
     f1_vals = []          # first date field across the file (day or month)
     f2_vals = []          # second date field across the file (month or day)
     current = None        # last entry, for multi-line continuation
+    system_events = []    # group-specific notifications (added/left/created/…)
 
     for raw in lines:
         # Normalise exotic whitespace (U+202F narrow no-break, U+00A0 no-break).
@@ -716,8 +820,11 @@ def parse_whatsapp_file(content):
                     continue
             # A dated line with no "sender:" is a system notification
             # (e.g. "Alice left", "Bob added Carol") — skip it, and don't let
-            # subsequent lines attach to a stale message.
+            # subsequent lines attach to a stale message. Record the group-specific
+            # ones so chat-type detection can see them.
             if DATED_LINE_RE.match(line):
+                if GROUP_EVENT_RE.search(line):
+                    system_events.append({'text': line})
                 current = None
                 continue
             # Otherwise it's a continuation of the previous message.
@@ -751,6 +858,8 @@ def parse_whatsapp_file(content):
 
         # System message that carried a colon and matched the header pattern.
         if SYSTEM_MSG_RE.search(sender):
+            if GROUP_EVENT_RE.search(line):
+                system_events.append({'text': line})
             current = None
             continue
 
@@ -856,11 +965,35 @@ def parse_whatsapp_file(content):
         {k: dict(v) for k, v in media_breakdown.items()},
         media_events,
         call_events,
+        system_events,
     )
 
 
 # Historical alias — the parser was renamed from parse_whatsapp_chat.
 parse_whatsapp_chat = parse_whatsapp_file
+
+
+def detect_chat_type(messages, system_events):
+    """Infer whether an export is a 'group' or '1v1' chat from its contents.
+
+    This is intentionally independent of the user's manual selection. Returns
+    'group' if ANY group signal is found, otherwise '1v1':
+
+      1. 3+ unique senders            → definitely a group.
+      2. Any group system event       → group (added / removed / left / joined /
+         created group / subject change …). system_events only ever contains
+         group-specific notifications (see GROUP_EVENT_RE), so any entry is a
+         positive signal — this is what catches a group in which only two people
+         ever actually sent a message.
+
+    Only 2 unique senders and no group events → '1v1'.
+    """
+    unique_senders = {m['sender'] for m in messages}
+    if len(unique_senders) >= 3:
+        return 'group'
+    if system_events:
+        return 'group'
+    return '1v1'
 
 
 def media_breakdown_from_events(events):
@@ -1494,6 +1627,7 @@ def compute_1to1_metrics(messages, participants, media_breakdown, call_events=No
         'word_histogram': word_histogram,
         'question_ratio': question_ratio,
         'abbrev_density': abbrev_density,
+        'word_frequencies': compute_word_frequencies(messages, participants),
         
         # Emoji
         'top_emojis_A': top_emojis(msgs_A),
@@ -1815,6 +1949,10 @@ def compute_group_metrics(messages, participants, media_breakdown, call_events=N
         'sessions_total': sessions_total,
         'top_session_initiator': top_session_initiator,
         'top_session_ender': top_session_ender,
+
+        # Word frequencies (per participant + merged overall)
+        'word_frequencies': compute_word_frequencies(
+            messages, ranked_names, overall=True),
 
         # Parity
         'midnight_index': midnight_index,
