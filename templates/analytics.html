@@ -493,6 +493,37 @@
 
                     <p class="wc-insight" x-show="wcInsight()" x-html="wcInsight()"></p>
                 </div>
+
+                <!-- ── Top 10 Words (bar chart) — shares the tab state above ── -->
+                <div class="glass-card p-6 rounded-xl mt-gutter">
+                    <div class="flex justify-between items-center mb-2">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Top 10 Words</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">leaderboard</span>
+                    </div>
+                    <p class="text-xs text-on-surface-variant font-mono-label mb-5 uppercase tracking-wider">Most frequent words by use count</p>
+
+                    <!-- 1v1: two charts side by side (stack on mobile) -->
+                    <template x-if="d.mode === '1v1'">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-gutter">
+                            <div>
+                                <p class="font-mono-label text-[11px] uppercase tracking-widest text-on-surface-variant mb-2 text-center" x-text="d.participants[0]"></p>
+                                <div id="topWordsChartA"></div>
+                            </div>
+                            <div>
+                                <p class="font-mono-label text-[11px] uppercase tracking-widest text-on-surface-variant mb-2 text-center" x-text="d.participants[1]"></p>
+                                <div id="topWordsChartB"></div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- group: single chart that follows the active tab above -->
+                    <template x-if="d.mode === 'group'">
+                        <div>
+                            <p class="font-mono-label text-[11px] uppercase tracking-widest text-on-surface-variant mb-2 text-center" x-text="wcActiveLabel()"></p>
+                            <div id="topWordsChartGroup"></div>
+                        </div>
+                    </template>
+                </div>
             </section>
 
             <!-- ── 📞 Call Analysis (hidden when the export has no calls) ── -->
@@ -792,7 +823,17 @@
 
             setWcTab(key) {
                 this.wcActive = key;
-                this.$nextTick(() => this.renderWordCloud());
+                this.$nextTick(() => {
+                    this.renderWordCloud();
+                    // Group bar chart is tab-linked; 1v1 shows both people at once.
+                    if (this.d.mode === 'group') this.renderGroupTopWords();
+                });
+            },
+
+            // Label of the currently active tab (for the group bar-chart heading).
+            wcActiveLabel() {
+                const t = this.wcTabs().find(t => t.key === this.wcActive);
+                return t ? t.label : '';
             },
 
             wcInsight() {
@@ -970,6 +1011,78 @@
                 this.buildWordCloud(this.wcWords(), 'wordCloud');
             },
 
+            // ── Top 10 Words bar chart (matches the existing ApexCharts pattern) ──
+
+            // Horizontal bar config for one participant's top 10 words. Words are
+            // reversed so the most-used sits at the TOP of the chart.
+            topWordsConfig(words, color) {
+                const ct = getChartTheme();
+                const isMobile = window.innerWidth < 640;
+                const ordered = (words || []).slice(0, 10).reverse();
+                const truncate = w => (w.length > 12 ? w.slice(0, 12) + '…' : w);
+                const countColor = ct.mode === 'dark' ? '#9ca3af' : '#6b7280';
+                const wordColor = ct.mode === 'dark' ? '#ffffff' : '#1f2937';
+                return {
+                    series: [{ name: 'Times used', data: ordered.map(w => w.count) }],
+                    chart: { type: 'bar', height: isMobile ? 220 : 280, toolbar: { show: false }, background: 'transparent' },
+                    theme: { mode: ct.mode },
+                    plotOptions: { bar: { horizontal: true, borderRadius: 4, dataLabels: { position: 'top' } } },
+                    dataLabels: {
+                        enabled: true, offsetX: 20,
+                        style: { colors: [countColor], fontSize: '11px' }
+                    },
+                    xaxis: {
+                        categories: ordered.map(w => truncate(w.word)),
+                        labels: { style: { colors: countColor } }
+                    },
+                    yaxis: { labels: { style: { colors: wordColor, fontSize: '13px', fontWeight: 600 } } },
+                    colors: [color],
+                    grid: { borderColor: ct.gridColor },
+                    legend: { show: false },
+                    tooltip: { theme: ct.mode, y: { formatter: v => v + (v === 1 ? ' time' : ' times') } }
+                };
+            },
+
+            // Build the chart(s) for the current mode. Destroys any prior instances
+            // first so this is safe to call on load, filter, theme-change and tab-switch.
+            renderTopWordsCharts(d) {
+                ['topWordsA', 'topWordsB', 'topWordsGroup'].forEach(k => {
+                    if (this.charts[k]) { try { this.charts[k].destroy(); } catch (_) {} delete this.charts[k]; }
+                });
+                const wf = d.word_frequencies;
+                if (!wf) return;
+                if (d.mode === '1v1') {
+                    const pairs = [
+                        ['#topWordsChartA', wf.per_participant[d.participants[0]], '#5EEAD4', 'topWordsA'],
+                        ['#topWordsChartB', wf.per_participant[d.participants[1]], '#34D399', 'topWordsB'],
+                    ];
+                    pairs.forEach(([sel, words, color, key]) => {
+                        const el = document.querySelector(sel);
+                        if (!el || !words || !words.length) return;
+                        const chart = new ApexCharts(el, this.topWordsConfig(words, color));
+                        this.charts[key] = chart;
+                        chart.render();
+                    });
+                } else if (d.mode === 'group') {
+                    this.renderGroupTopWords();
+                }
+            },
+
+            // Group chart for the active tab — destroy + re-render on every switch.
+            renderGroupTopWords() {
+                const el = document.querySelector('#topWordsChartGroup');
+                if (!el) return;
+                if (this.charts.topWordsGroup) {
+                    try { this.charts.topWordsGroup.destroy(); } catch (_) {}
+                    delete this.charts.topWordsGroup;
+                }
+                const words = this.wcWords();
+                if (!words || !words.length) { el.innerHTML = ''; return; }
+                const chart = new ApexCharts(el, this.topWordsConfig(words, '#5EEAD4'));
+                this.charts.topWordsGroup = chart;
+                chart.render();
+            },
+
             async init() {
                 this.d = {{ data|safe }};
                 if (!this.d) {
@@ -1129,7 +1242,11 @@
                 this._themeBound = true;
                 window.addEventListener('theme-changed', () => {
                     const ct2 = getChartTheme();
-                    Object.values(this.charts || {}).forEach(c => {
+                    Object.entries(this.charts || {}).forEach(([key, c]) => {
+                        // Top 10 Words charts have bespoke bar + label colours; the
+                        // generic palette update would flatten them. They're rebuilt
+                        // below instead.
+                        if (key.startsWith('topWords')) return;
                         try {
                             c.updateOptions({
                                 theme: { mode: ct2.mode },
@@ -1138,6 +1255,8 @@
                             });
                         } catch (_) {}
                     });
+                    // Rebuild the top-words charts for the new theme's label colours.
+                    if (this.d) this.renderTopWordsCharts(this.d);
                 });
             },
 
@@ -1296,6 +1415,9 @@
                 // Word cloud (pure DOM, not ApexCharts) — render after the section
                 // is in the DOM so the container has a measurable width.
                 this.renderWordCloud();
+
+                // Top 10 Words bar chart(s) — same data source as the cloud.
+                this.renderTopWordsCharts(d);
 
                 // Theme re-coloring is handled once by bindThemeListener() (reads
                 // this.charts live), so re-renders don't stack duplicate listeners.
