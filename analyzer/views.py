@@ -14,7 +14,7 @@ from .parser import (
 )
 
 MAX_TXT_BYTES = 10 * 1024 * 1024
-MAX_ZIP_BYTES = 50 * 1024 * 1024
+MAX_ZIP_BYTES = 150 * 1024 * 1024
 MAX_UNCOMPRESSED_SIZE = 50 * 1024 * 1024
 
 
@@ -22,9 +22,9 @@ def extract_chat_text(uploaded_file):
     filename = uploaded_file.name.lower()
     if filename.endswith('.zip'):
         with zipfile.ZipFile(uploaded_file) as zf:
-            total_size = sum(info.file_size for info in zf.infolist())
-            if total_size > MAX_UNCOMPRESSED_SIZE:
-                raise ValueError("Archive too large (uncompressed content exceeds 50 MB).")
+            # WhatsApp bundles exactly one chat .txt (named like "WhatsApp Chat
+            # with X.txt" or "_chat.txt"). We read only that file and ignore all
+            # media, so the archive's overall (un)compressed size is irrelevant.
             txt_candidates = [
                 n for n in zf.namelist()
                 if n.lower().endswith('.txt') and not n.startswith('__MACOSX')
@@ -35,6 +35,9 @@ def extract_chat_text(uploaded_file):
                 (n for n in txt_candidates if n.lower().endswith('_chat.txt')),
                 txt_candidates[0],
             )
+            # Guard only the text file we actually extract — not the media.
+            if zf.getinfo(chat_file).file_size > MAX_UNCOMPRESSED_SIZE:
+                raise ValueError("Chat text file too large (uncompressed text exceeds 50 MB).")
             with zf.open(chat_file) as f:
                 content = f.read().decode('utf-8', errors='ignore')
             media_file_count = len(zf.namelist()) - len(txt_candidates)
@@ -65,7 +68,7 @@ def upload_and_analyze(request):
         if filename.endswith('.zip'):
             if uploaded_file.size > MAX_ZIP_BYTES:
                 return JsonResponse(
-                    {'error': 'File too large. Maximum compressed size is 50 MB.'},
+                    {'error': 'File too large. Maximum compressed size is 150 MB.'},
                     status=413,
                 )
         else:

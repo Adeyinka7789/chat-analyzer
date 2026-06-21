@@ -236,7 +236,7 @@
 {% block extra_scripts %}
 <script>
 const MAX_TXT_BYTES = 10 * 1024 * 1024;
-const MAX_ZIP_BYTES = 50 * 1024 * 1024;
+const MAX_ZIP_BYTES = 150 * 1024 * 1024;
 
 function getCookie(name) {
     const value = `; ${document.cookie}`;
@@ -273,7 +273,7 @@ function analyzeFlow() {
             const isZip = file.name.endsWith('.zip');
             const maxBytes = isZip ? MAX_ZIP_BYTES : MAX_TXT_BYTES;
             if (file.size > maxBytes) {
-                alert(`File is too large. Maximum size is ${isZip ? '50 MB (compressed)' : '10 MB'}.`);
+                alert(`File is too large. Maximum size is ${isZip ? '150 MB (compressed)' : '10 MB'}.`);
                 return;
             }
             this.selectedFile = file;
