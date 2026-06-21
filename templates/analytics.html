@@ -112,11 +112,8 @@
     .wc-cloud {
         position: relative;
         width: 100%;
-        height: 380px;
+        min-height: 380px;
         overflow: hidden;
-    }
-    @media (max-width: 640px) {
-        .wc-cloud { height: 300px; }
     }
     .wc-empty {
         color: var(--on-surface-variant);
@@ -809,15 +806,19 @@
                     + `said ${top.count} ${times}.`;
             },
 
-            // Force-based random word cloud — try random spots, reject overlaps.
+            // Force-based random word cloud. Dimensions are measured FIRST in a
+            // hidden off-screen div — reading offsetWidth/Height on a freshly
+            // appended position:absolute span returns 0 before paint, which made
+            // every word fall back to x≈0 and stack on the left.
             buildWordCloud(words, containerId) {
                 const container = document.getElementById(containerId);
                 if (!container) return;
-                const W = container.offsetWidth;
-                const H = container.offsetHeight || 320;
-                container.style.position = 'relative';
                 container.innerHTML = '';
+                const W = container.offsetWidth || 600;
+                const H = 380;
+                container.style.position = 'relative';
                 container.style.height = H + 'px';
+                container.style.overflow = 'hidden';
 
                 if (!words || words.length === 0) {
                     container.innerHTML = '<p class="wc-empty">Not enough words to build a cloud yet.</p>';
@@ -827,92 +828,96 @@
                 const maxCount = words[0].count;
                 const minCount = words[words.length - 1].count;
 
-                // Font size: 13px to 42px
                 const fontSize = (count) => {
                     if (maxCount === minCount) return 24;
-                    return Math.round(13 + ((count - minCount) /
-                           (maxCount - minCount)) * 29);
+                    return Math.round(14 + ((count - minCount) /
+                           (maxCount - minCount)) * 28);
                 };
 
-                // Color palette — more variety
                 const colors = [
-                    '#5EEAD4',  // jade (top words)
-                    '#34D399',  // emerald
-                    '#60A5FA',  // blue
-                    '#F472B6',  // pink
-                    '#FBBF24',  // amber
-                    '#A78BFA',  // purple
-                    '#FB923C',  // orange
-                    '#ffffff',  // white
-                    '#9ca3af',  // muted (filler words)
+                    '#5EEAD4', '#34D399', '#60A5FA', '#F472B6',
+                    '#FBBF24', '#A78BFA', '#FB923C', '#ffffff', '#9ca3af'
                 ];
 
-                const getColor = (index, count) => {
-                    if (index === 0) return colors[0]; // top word always jade
+                const getColor = (index) => {
+                    if (index === 0) return colors[0];
                     if (index < 3) return colors[1];
-                    if (index < 8) return colors[Math.floor(Math.random() * 6) + 1];
-                    return colors[7];
+                    if (index < 8) return colors[Math.floor(index % 6) + 1];
+                    if (index < 20) return colors[7];
+                    return colors[8];
                 };
 
+                // PHASE 1: measure every word's real dimensions off-screen.
+                const measureDiv = document.createElement('div');
+                measureDiv.style.cssText = `
+                    position: absolute; visibility: hidden;
+                    white-space: nowrap; top: -9999px;
+                `;
+                document.body.appendChild(measureDiv);
+
+                const wordData = words.map((item, index) => {
+                    const fs = fontSize(item.count);
+                    const span = document.createElement('span');
+                    span.textContent = item.word;
+                    span.style.cssText = `
+                        font-size: ${fs}px;
+                        font-weight: ${index < 5 ? '700' : index < 15 ? '600' : '400'};
+                        display: inline-block;
+                        padding: 2px 4px;
+                    `;
+                    measureDiv.appendChild(span);
+                    return { item, index, fs, w: span.offsetWidth, h: span.offsetHeight };
+                });
+
+                document.body.removeChild(measureDiv);
+
+                // PHASE 2: place words across the full container using real sizes.
                 const placed = [];
 
                 const overlaps = (x, y, w, h) => {
                     for (const p of placed) {
-                        if (x < p.x + p.w + 8 && x + w + 8 > p.x &&
-                            y < p.y + p.h + 6 && y + h + 6 > p.y) return true;
+                        if (x < p.x + p.w + 10 && x + w + 10 > p.x &&
+                            y < p.y + p.h + 8 && y + h + 8 > p.y) return true;
                     }
                     return false;
                 };
 
-                words.forEach((item, index) => {
+                wordData.forEach(({ item, index, fs, w, h }) => {
+                    const color = getColor(index);
                     const span = document.createElement('span');
-                    const fs = fontSize(item.count);
                     span.textContent = item.word;
                     span.style.cssText = `
                         position: absolute;
                         font-size: ${fs}px;
                         font-weight: ${index < 5 ? '700' : index < 15 ? '600' : '400'};
-                        color: ${getColor(index, item.count)};
-                        cursor: pointer;
+                        color: ${color};
                         white-space: nowrap;
-                        transition: transform 0.2s;
+                        cursor: pointer;
+                        transition: transform 0.15s;
                         user-select: none;
                     `;
-                    span.title = `${item.word}: used ${item.count} times`;
                     span.addEventListener('mouseenter', () =>
-                        span.style.transform = 'scale(1.15)');
+                        span.style.transform = 'scale(1.2)');
                     span.addEventListener('mouseleave', () =>
                         span.style.transform = 'scale(1)');
-                    span.addEventListener('click', () => {
-                        this.showTooltip(span, `"${item.word}" — said ${item.count} times`);
-                    });
+                    span.addEventListener('click', () =>
+                        this.showTooltip(span, `"${item.word}" — said ${item.count} times`));
 
-                    container.appendChild(span);
-                    const w = span.offsetWidth;
-                    const h = span.offsetHeight;
-
-                    // Try random positions, find one that doesn't overlap
-                    let placed_flag = false;
-                    for (let attempt = 0; attempt < 200; attempt++) {
-                        const x = Math.random() * Math.max(1, W - w - 10) + 5;
-                        const y = Math.random() * Math.max(1, H - h - 10) + 5;
-                        if (!overlaps(x, y, w, h)) {
-                            span.style.left = x + 'px';
-                            span.style.top = y + 'px';
-                            placed.push({ x, y, w, h });
-                            placed_flag = true;
+                    // Try 300 random positions across the FULL container.
+                    let x = W / 2, y = H / 2; // fallback center
+                    for (let attempt = 0; attempt < 300; attempt++) {
+                        const tx = Math.random() * Math.max(1, W - w - 16) + 8;
+                        const ty = Math.random() * Math.max(1, H - h - 10) + 5;
+                        if (!overlaps(tx, ty, w, h)) {
+                            x = tx; y = ty;
                             break;
                         }
                     }
-                    // If couldn't place without overlap after 200 tries,
-                    // place anyway at a random edge position
-                    if (!placed_flag) {
-                        const x = Math.random() * Math.max(1, W - w - 10) + 5;
-                        const y = Math.random() * Math.max(1, H - h - 10) + 5;
-                        span.style.left = x + 'px';
-                        span.style.top = y + 'px';
-                        placed.push({ x, y, w, h });
-                    }
+
+                    span.style.left = x + 'px';
+                    span.style.top = y + 'px';
+                    placed.push({ x, y, w, h });
+                    container.appendChild(span);
                 });
             },
 
