@@ -1,0 +1,1302 @@
+{% extends "base.html" %}
+{% block title %}Showroom Dashboard | Contextual Chat Insights{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/dayjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/plugin/weekOfYear.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/plugin/customParseFormat.js"></script>
+<style>
+    .emoji-bounce:hover { animation: emoji-pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) both; }
+    @keyframes emoji-pop { 0% { transform: scale(1); } 50% { transform: scale(1.4) rotate(10deg); } 100% { transform: scale(1.2); } }
+    .stat-tile {
+        background: var(--surface-container-low);
+        border: 1px solid var(--outline-variant);
+        border-radius: 0.5rem;
+        padding: 1rem 1.25rem;
+        transition: all 0.2s ease;
+    }
+    .stat-tile:hover { transform: translateY(-2px); border-color: var(--primary-fixed-dim); }
+    .balance-bar-track {
+        height: 10px;
+        border-radius: 5px;
+        background: var(--outline-variant);
+        overflow: hidden;
+        position: relative;
+    }
+    .balance-bar-fill-a {
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        border-radius: 5px 0 0 5px;
+        background: var(--primary-fixed-dim);
+        box-shadow: 0 0 8px rgba(var(--color-primary-fixed-dim), 0.5);
+    }
+    .balance-bar-fill-b {
+        position: absolute;
+        right: 0; top: 0; bottom: 0;
+        border-radius: 0 5px 5px 0;
+        background: var(--secondary-container);
+        box-shadow: 0 0 8px rgba(var(--color-secondary-container), 0.4);
+    }
+    .insight-card {
+        background: var(--surface-container-low);
+        border: 1px solid var(--outline-variant);
+        border-left: 3px solid var(--primary-fixed-dim);
+        border-radius: 0.5rem;
+        padding: 0.875rem 1rem;
+        display: flex;
+        gap: 0.75rem;
+        align-items: flex-start;
+    }
+    .health-gauge {
+        position: relative;
+        width: 140px;
+        height: 70px;
+        overflow: hidden;
+    }
+    .health-gauge-inner {
+        position: absolute;
+        width: 140px;
+        height: 140px;
+        border-radius: 50%;
+        bottom: 0;
+        left: 0;
+        background: conic-gradient(var(--primary-fixed-dim) 0deg, var(--outline-variant) 0deg);
+        transition: background 0.5s ease;
+    }
+    .word-battle-bar {
+        height: 6px;
+        border-radius: 3px;
+        background: linear-gradient(90deg, var(--primary-fixed-dim) 0%, var(--secondary-container) 100%);
+        transition: width 0.3s ease;
+    }
+    .metric-badge {
+        font-size: 10px;
+        font-weight: bold;
+        padding: 2px 8px;
+        border-radius: 12px;
+        background: var(--surface-container-high);
+        color: var(--on-surface-variant);
+    }
+    .comparison-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--outline-variant);
+    }
+    .comparison-row:last-child { border-bottom: none; }
+    .filter-chip {
+        padding: 0.5rem 1rem;
+        border-radius: 2rem;
+        background: var(--surface-container-high);
+        color: var(--on-surface-variant);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+    .filter-chip.active {
+        background: var(--primary-fixed);
+        color: var(--on-primary-fixed);
+    }
+    .filter-chip:hover:not(.active) {
+        background: var(--surface-container-highest);
+    }
+    .date-range-picker {
+        background: var(--surface-container-low);
+        border: 1px solid var(--outline-variant);
+        border-radius: 0.5rem;
+        padding: 0.5rem;
+    }
+    .filter-stats {
+        background: var(--surface-container-lowest);
+        border-radius: 0.5rem;
+        padding: 0.75rem 1rem;
+        font-size: 0.875rem;
+    }
+    /* ── Memorable Moments (Phase C3) ── */
+    .mm-scroll {
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: 80%;
+        gap: 1rem;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: none;          /* Firefox */
+        -ms-overflow-style: none;       /* old Edge */
+        padding-bottom: 0.5rem;
+    }
+    .mm-scroll::-webkit-scrollbar { display: none; }   /* Chrome/Safari */
+    @media (min-width: 768px) {
+        .mm-scroll {
+            grid-auto-flow: row;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-auto-columns: auto;
+            overflow-x: visible;
+        }
+    }
+    .mm-card {
+        scroll-snap-align: start;
+        background: var(--surface-container-low);
+        border: 1px solid var(--outline-variant);
+        border-top: 3px solid var(--primary-fixed-dim);
+        border-radius: 0.5rem;
+        padding: 1rem 1.25rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+    .mm-card:hover { transform: translateY(-2px); }
+    .mm-label {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--on-surface-variant);
+    }
+    .mm-headline {
+        font-size: 1.5rem;
+        font-weight: 700;
+        line-height: 1.1;
+        color: var(--primary-fixed);
+    }
+    .mm-emoji { font-size: 2.25rem; line-height: 1; }
+    .mm-context {
+        font-size: 12px;
+        line-height: 1.4;
+        color: var(--on-surface-variant);
+    }
+</style>
+{% endblock %}
+
+{% block site_header %}{% endblock %}
+{% block site_footer %}{% endblock %}
+
+{% block content %}
+<div x-data="dashboardState()" x-init="init()" x-cloak>
+    <!-- Top nav -->
+    <nav class="fixed top-0 left-0 w-full z-50 flex items-center justify-between px-margin-desktop h-20 bg-surface/80 backdrop-blur-xl border-b border-outline-variant shadow-[0_0_40px_rgba(var(--color-primary-fixed),0.1)]">
+        <span class="font-headline-lg text-headline-lg font-bold text-primary-fixed">Contextual Chat Engine</span>
+        <div class="flex items-center gap-4">
+            <button @click="window.open('/card/', '_blank')" class="flex items-center gap-2 px-6 py-2 rounded-full border border-primary-fixed text-primary-fixed font-bold text-sm hover:bg-primary-fixed/10 transition-all active:scale-95">
+                <span>✨ Share Card</span>
+            </button>
+            <button @click="showExportModal = true" class="hidden md:flex items-center gap-2 px-6 py-2 rounded-full bg-primary-fixed text-on-primary-fixed font-bold text-sm hover:brightness-110 transition-all active:scale-95">
+                <span class="material-symbols-outlined text-lg">download</span>
+                <span>Export Report</span>
+            </button>
+            <button onclick="toggleTheme()" class="text-on-surface-variant hover:text-primary-fixed transition-colors" aria-label="Toggle theme">
+                <span class="material-symbols-outlined" id="themeIcon">light_mode</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Side nav (desktop) -->
+    <aside class="fixed left-0 top-20 h-[calc(100vh-80px)] w-64 z-40 bg-surface-container-lowest/90 backdrop-blur-xl border-r border-outline-variant hidden md:flex flex-col p-6">
+        <nav class="flex-1 space-y-2">
+            <div class="flex items-center gap-3 px-4 py-3 rounded-lg bg-primary-container/20 text-primary-fixed border-r-4 border-primary-fixed transition-all cursor-pointer">
+                <span class="material-symbols-outlined">dashboard</span>
+                <span class="font-body-md">Dashboard</span>
+            </div>
+            <a href="/analytics/" class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-all">
+                <span class="material-symbols-outlined">bar_chart</span>
+                <span class="font-body-md">Analytics</span>
+            </a>
+        </nav>
+    </aside>
+
+    <!-- Main content -->
+    <main class="md:ml-64 pt-28 pb-12 px-margin-desktop min-h-screen">
+        <div class="glass-card p-8 text-center rounded-xl" x-show="loading" x-cloak>
+            <div class="animate-pulse text-primary-fixed">Loading insights...</div>
+        </div>
+        <div x-show="!loading" x-cloak>
+
+            <!-- ── FILTER BAR ── -->
+            <div class="glass-card p-6 rounded-xl mb-gutter">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex flex-wrap gap-2">
+                        <button @click="setFilter('all')" :class="{'active': activeFilter === 'all'}" class="filter-chip">📅 All Time</button>
+                        <button @click="setFilter('month')" :class="{'active': activeFilter === 'month'}" class="filter-chip">📆 This Month</button>
+                        <button @click="setFilter('week')" :class="{'active': activeFilter === 'week'}" class="filter-chip">📊 This Week</button>
+                        <button @click="setFilter('custom')" :class="{'active': activeFilter === 'custom'}" class="filter-chip">🎯 Custom Range</button>
+                    </div>
+                    
+                    <div x-show="activeFilter === 'custom'" class="date-range-picker flex gap-2 items-center" x-transition.duration.200ms>
+                        <input type="date" x-model="customStartDate" @change="applyCustomFilter" class="bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm">
+                        <span>→</span>
+                        <input type="date" x-model="customEndDate" @change="applyCustomFilter" class="bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm">
+                        <button @click="clearCustomFilter" class="text-on-surface-variant hover:text-primary-fixed">✕</button>
+                    </div>
+                    
+                    <div class="filter-stats" x-show="filteredMessagesCount !== totalMessages">
+                        <span class="material-symbols-outlined text-sm align-middle mr-1">filter_alt</span>
+                        Showing <strong x-text="filteredMessagesCount.toLocaleString()"></strong> of <strong x-text="totalMessages.toLocaleString()"></strong> messages
+                        <button @click="setFilter('all')" class="ml-2 text-primary-fixed text-sm underline">Clear filter</button>
+                    </div>
+                </div>
+                
+                <!-- Quick date shortcuts -->
+                <div class="flex flex-wrap gap-2 mt-4 pt-4 border-t border-outline-variant">
+                    <span class="text-xs text-on-surface-variant self-center">Quick views:</span>
+                    <button @click="setQuickDate('last7days')" class="text-xs px-3 py-1 rounded-full bg-surface-container-high hover:bg-surface-container-highest">Last 7 days</button>
+                    <button @click="setQuickDate('last30days')" class="text-xs px-3 py-1 rounded-full bg-surface-container-high hover:bg-surface-container-highest">Last 30 days</button>
+                    <button @click="setQuickDate('last90days')" class="text-xs px-3 py-1 rounded-full bg-surface-container-high hover:bg-surface-container-highest">Last 90 days</button>
+                    <button @click="setQuickDate('yearToDate')" class="text-xs px-3 py-1 rounded-full bg-surface-container-high hover:bg-surface-container-highest">Year to date</button>
+                </div>
+
+                <!-- Shown briefly while a server-side filter request is in flight -->
+                <p x-show="filterLoading" x-cloak class="text-sm text-on-surface-variant mt-3">
+                    <span class="material-symbols-outlined text-sm align-middle animate-spin">progress_activity</span>
+                    Recomputing metrics for the selected range…
+                </p>
+            </div>
+
+            <!-- ── Sync Snapshot with Health Score ── -->
+            <header class="glass-card p-8 rounded-xl mb-gutter border-l-4 border-primary-fixed">
+                <div class="flex items-center gap-2 mb-3">
+                    <span class="material-symbols-outlined text-primary-fixed">sync</span>
+                    <h1 class="font-headline-lg text-xl text-primary-fixed">Sync Snapshot</h1>
+                    <span class="ml-auto metric-badge" x-text="'Health Score: ' + ((filteredData.health_score?.overall ?? d.health_score.overall)) + '/100'"></span>
+                </div>
+                <p class="font-body-md text-on-surface-variant max-w-2xl leading-relaxed mb-6" x-text="filteredSummary || summaryText"></p>
+                
+                <!-- Enhanced stats grid -->
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+                    <div class="stat-tile">
+                        <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Filtered Messages</p>
+                        <p class="text-2xl font-bold text-primary-fixed" x-text="filteredData.total_messages.toLocaleString()"></p>
+                    </div>
+                    <div class="stat-tile">
+                        <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Avg / Day</p>
+                        <p class="text-2xl font-bold text-primary-fixed" x-text="filteredData.avg_msgs_per_day || d.avg_msgs_per_day"></p>
+                    </div>
+                    <div class="stat-tile">
+                        <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Turn Equality</p>
+                        <p class="text-2xl font-bold" :class="(filteredData.turn_equality || d.turn_equality) >= 70 ? 'text-tertiary-fixed-dim' : 'text-secondary-container'" x-text="(filteredData.turn_equality || d.turn_equality) + '%'"></p>
+                    </div>
+                    <div class="stat-tile">
+                        <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Date Range</p>
+                        <p class="text-sm font-bold text-on-surface" x-text="filterDateRange"></p>
+                    </div>
+                    <div class="stat-tile">
+                        <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Response Balance</p>
+                        <p class="text-sm font-semibold text-on-surface leading-snug" x-text="filteredData.response_balance_text || d.response_balance_text"></p>
+                    </div>
+                </div>
+
+                <!-- Health Score detailed breakdown -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4 border-t border-outline-variant">
+                    <div class="text-center">
+                        <p class="text-[10px] text-on-surface-variant">Engagement</p>
+                        <p class="text-lg font-bold" x-text="d.health_score.engagement"></p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-[10px] text-on-surface-variant">Balance</p>
+                        <p class="text-lg font-bold" x-text="d.health_score.balance"></p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-[10px] text-on-surface-variant">Sentiment</p>
+                        <p class="text-lg font-bold" x-text="d.health_score.sentiment"></p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-[10px] text-on-surface-variant">Consistency</p>
+                        <p class="text-lg font-bold" x-text="d.health_score.consistency"></p>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Charts grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-gutter">
+
+                <!-- Volume Split -->
+                <div class="glass-card p-6 rounded-xl col-span-1">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">The Volume Split</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">pie_chart</span>
+                    </div>
+                    <div id="volumeSplitChart"></div>
+                    <p class="font-mono-label text-[10px] text-center mt-4 opacity-60 uppercase tracking-widest">Messages during selected period</p>
+                </div>
+
+                <!-- Response Velocity -->
+                <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-2">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Response Velocity</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">speed</span>
+                    </div>
+                    <div id="velocityChart"></div>
+                    <div class="mt-4 grid grid-cols-2 gap-4">
+                        <div class="bg-surface-container-low p-3 border-l-2 border-primary-fixed">
+                            <span class="block font-mono-label text-xs text-on-surface-variant" x-text="participant1 + ' AVERAGE'"></span>
+                            <span class="font-headline-lg text-2xl text-primary-fixed" x-text="filteredLatencyText1"></span>
+                        </div>
+                        <div class="bg-surface-container-low p-3 border-l-2 border-secondary-container">
+                            <span class="block font-mono-label text-xs text-on-surface-variant" x-text="participant2 + ' AVERAGE'"></span>
+                            <span class="font-headline-lg text-2xl text-secondary" x-text="filteredLatencyText2"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Word Battle Arena -->
+                <div class="glass-card p-6 rounded-xl col-span-1">
+                    <div class="flex justify-between items-center mb-5">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Word Battle Arena</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">sports_mma</span>
+                    </div>
+                    <div class="space-y-4">
+                        <div class="comparison-row">
+                            <span class="text-sm font-medium" x-text="participant1"></span>
+                            <span class="text-sm font-medium" x-text="participant2"></span>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span>Avg Words</span>
+                                <span x-text="(filteredData.word_battle?.avg_words || d.word_battle.avg_words)[0] + ' vs ' + (filteredData.word_battle?.avg_words || d.word_battle.avg_words)[1]"></span>
+                            </div>
+                            <div class="word-battle-bar" :style="'width:' + ((filteredData.word_battle?.avg_words || d.word_battle.avg_words)[0] / Math.max(...(filteredData.word_battle?.avg_words || d.word_battle.avg_words), 1) * 100) + '%'"></div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span>Longest Message</span>
+                                <span class="font-bold" :class="(filteredData.word_battle?.longest_message || d.word_battle.longest_message)[0] > (filteredData.word_battle?.longest_message || d.word_battle.longest_message)[1] ? 'text-primary-fixed' : 'text-secondary-container'" x-text="(filteredData.word_battle?.longest_message || d.word_battle.longest_message)[0] + ' vs ' + (filteredData.word_battle?.longest_message || d.word_battle.longest_message)[1] + ' chars'"></span>
+                            </div>
+                            <div class="text-[10px] text-on-surface-variant" x-text="'🏆 ' + ((filteredData.word_battle?.longest_message || d.word_battle.longest_message)[0] > (filteredData.word_battle?.longest_message || d.word_battle.longest_message)[1] ? participant1 : participant2) + ' wins the epic battle!'"></div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span>Unique Words</span>
+                                <span x-text="(filteredData.word_battle?.unique_words || d.word_battle.unique_words)[0] + ' vs ' + (filteredData.word_battle?.unique_words || d.word_battle.unique_words)[1]"></span>
+                            </div>
+                            <div class="word-battle-bar" :style="'width:' + ((filteredData.word_battle?.unique_words || d.word_battle.unique_words)[0] / Math.max(...(filteredData.word_battle?.unique_words || d.word_battle.unique_words), 1) * 100) + '%'"></div>
+                        </div>
+                    </div>
+                    <div id="wordHistogram" class="mt-4"></div>
+                </div>
+
+                <!-- Power Dynamics -->
+                <div class="glass-card p-6 rounded-xl col-span-1">
+                    <div class="flex justify-between items-center mb-5">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Power Dynamics</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">balance</span>
+                    </div>
+                    <p class="text-xs text-on-surface-variant font-mono-label mb-5 uppercase tracking-wider">Who breaks the silence</p>
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-center text-sm font-semibold mb-1">
+                            <span class="text-primary-fixed" x-text="participant1"></span>
+                            <span class="text-secondary" x-text="participant2"></span>
+                        </div>
+                        <div class="balance-bar-track">
+                            <div class="balance-bar-fill-a" :style="'width:' + (filteredData.initiation_pct ? filteredData.initiation_pct[0] : d.initiation_pct[0]) + '%'"></div>
+                            <div class="balance-bar-fill-b" :style="'width:' + (filteredData.initiation_pct ? filteredData.initiation_pct[1] : d.initiation_pct[1]) + '%'"></div>
+                        </div>
+                        <div class="flex justify-between items-center text-xs font-mono-label text-on-surface-variant">
+                            <span x-text="(filteredData.initiation_pct ? filteredData.initiation_pct[0] : d.initiation_pct[0]) + '%'"></span>
+                            <span x-text="(filteredData.initiation_pct ? filteredData.initiation_pct[1] : d.initiation_pct[1]) + '%'"></span>
+                        </div>
+                    </div>
+                    
+                    <!-- Question/Statement Ratio -->
+                    <div class="mt-6 pt-4 border-t border-outline-variant">
+                        <div class="flex justify-between items-center mb-3">
+                            <span class="text-xs font-mono-label uppercase tracking-wider text-on-surface-variant">Curiosity Index</span>
+                            <span class="material-symbols-outlined text-sm">help</span>
+                        </div>
+                        <div class="space-y-2">
+                            <div class="flex justify-between text-sm">
+                                <span x-text="participant1"></span>
+                                <span class="font-mono-data" x-text="Math.round((filteredData.question_ratio ? filteredData.question_ratio[0] : d.question_ratio[0]) * 100) + '% questions'"></span>
+                            </div>
+                            <div class="balance-bar-track" style="height: 4px;">
+                                <div class="balance-bar-fill-a" :style="'width:' + ((filteredData.question_ratio ? filteredData.question_ratio[0] : d.question_ratio[0]) * 100) + '%'"></div>
+                            </div>
+                            <div class="flex justify-between text-sm">
+                                <span x-text="participant2"></span>
+                                <span class="font-mono-data" x-text="Math.round((filteredData.question_ratio ? filteredData.question_ratio[1] : d.question_ratio[1]) * 100) + '% questions'"></span>
+                            </div>
+                            <div class="balance-bar-track" style="height: 4px;">
+                                <div class="balance-bar-fill-b" :style="'width:' + ((filteredData.question_ratio ? filteredData.question_ratio[1] : d.question_ratio[1]) * 100) + '%'"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Conversation Sessions -->
+                <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-3">
+                    <div class="flex justify-between items-center mb-5">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Conversation Sessions</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">forum</span>
+                    </div>
+                    <p class="text-xs text-on-surface-variant font-mono-label mb-5 uppercase tracking-wider">Bursts of activity split by 4h+ silences</p>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="stat-tile">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Total Sessions</p>
+                            <p class="text-2xl font-bold text-primary-fixed" x-text="d.sessions_total ?? '—'"></p>
+                        </div>
+                        <div class="stat-tile">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Avg Session Length</p>
+                            <p class="text-2xl font-bold text-primary-fixed" x-text="(d.avg_session_length_msgs ?? 0) + ' msgs'"></p>
+                        </div>
+                        <div class="stat-tile">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">Who Starts More</p>
+                            <div class="space-y-1">
+                                <div class="flex justify-between text-sm">
+                                    <span :class="sessionStartsLeader === 0 ? 'text-primary-fixed font-bold' : 'text-on-surface'" x-text="participant1"></span>
+                                    <span class="font-mono-data" :class="sessionStartsLeader === 0 ? 'text-primary-fixed font-bold' : 'text-on-surface-variant'" x-text="(d.session_initiations && d.session_initiations[d.participants[0]]) || 0"></span>
+                                </div>
+                                <div class="flex justify-between text-sm">
+                                    <span :class="sessionStartsLeader === 1 ? 'text-primary-fixed font-bold' : 'text-on-surface'" x-text="participant2"></span>
+                                    <span class="font-mono-data" :class="sessionStartsLeader === 1 ? 'text-primary-fixed font-bold' : 'text-on-surface-variant'" x-text="(d.session_initiations && d.session_initiations[d.participants[1]]) || 0"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="stat-tile">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">Who Ends More</p>
+                            <div class="space-y-1">
+                                <div class="flex justify-between text-sm">
+                                    <span :class="sessionEndsLeader === 0 ? 'text-primary-fixed font-bold' : 'text-on-surface'" x-text="participant1"></span>
+                                    <span class="font-mono-data" :class="sessionEndsLeader === 0 ? 'text-primary-fixed font-bold' : 'text-on-surface-variant'" x-text="(d.session_endings && d.session_endings[d.participants[0]]) || 0"></span>
+                                </div>
+                                <div class="flex justify-between text-sm">
+                                    <span :class="sessionEndsLeader === 1 ? 'text-primary-fixed font-bold' : 'text-on-surface'" x-text="participant2"></span>
+                                    <span class="font-mono-data" :class="sessionEndsLeader === 1 ? 'text-primary-fixed font-bold' : 'text-on-surface-variant'" x-text="(d.session_endings && d.session_endings[d.participants[1]]) || 0"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Dead Chat Reviver highlight -->
+                    <div class="stat-tile flex items-center gap-3 mt-4" x-show="d.dead_chat_reviver && d.dead_chat_reviver.name">
+                        <span class="material-symbols-outlined text-primary-fixed text-3xl" style="font-variation-settings:'FILL' 1">local_fire_department</span>
+                        <div>
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Dead Chat Reviver</p>
+                            <p class="text-sm font-semibold text-on-surface" x-text="d.dead_chat_reviver ? (d.dead_chat_reviver.name + ' broke ' + d.dead_chat_reviver.count + ' long silence' + (d.dead_chat_reviver.count === 1 ? '' : 's') + ' (>24h)') : ''"></p>
+                        </div>
+                    </div>
+                    <div class="stat-tile mt-4 text-sm text-on-surface-variant" x-show="!d.dead_chat_reviver || !d.dead_chat_reviver.name">
+                        No long silences (&gt;24h) were ever broken — this chat stayed consistently active.
+                    </div>
+                </div>
+
+                <!-- Textual DNA -->
+                <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-2">
+                    <div class="flex justify-between items-center mb-5">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Textual DNA</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">genetics</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-6">
+                        <div>
+                            <p class="font-mono-label text-xs text-primary-fixed uppercase tracking-wider border-b border-outline-variant pb-2 mb-3" x-text="participant1"></p>
+                            <dl class="space-y-2 text-sm">
+                                <div class="flex justify-between"><dt class="text-on-surface-variant">Avg words/msg</dt><dd class="font-semibold text-on-surface" x-text="filteredData.textual_dna ? filteredData.textual_dna[0].avg_words : d.textual_dna[0].avg_words"></dd></div>
+                                <div class="flex justify-between"><dt class="text-on-surface-variant">Avg chars/msg</dt><dd class="font-semibold text-on-surface" x-text="filteredData.textual_dna ? filteredData.textual_dna[0].avg_chars : d.textual_dna[0].avg_chars"></dd></div>
+                                <div class="flex justify-between"><dt class="text-on-surface-variant">Vocab richness</dt><dd class="font-semibold text-on-surface" x-text="filteredData.textual_dna ? filteredData.textual_dna[0].vocab_richness : d.textual_dna[0].vocab_richness + '%'"></dd></div>
+                                <div class="flex justify-between"><dt class="text-on-surface-variant">Media shared</dt><dd class="font-semibold text-on-surface" x-text="filteredData.textual_dna ? filteredData.textual_dna[0].media : d.textual_dna[0].media"></dd></div>
+                                <div class="flex justify-between"><dt class="text-on-surface-variant">Abbreviation density</dt><dd class="font-semibold text-on-surface" x-text="(filteredData.abbrev_density ? filteredData.abbrev_density[0] : d.abbrev_density[0]) + '%'"></dd></div>
+                            </dl>
+                            <p class="font-mono-label text-[10px] uppercase tracking-wider text-on-surface-variant mt-4 mb-1">Msg length over time</p>
+                            <div id="dnaSparklineA"></div>
+                        </div>
+                        <div>
+                            <p class="font-mono-label text-xs text-secondary uppercase tracking-wider border-b border-outline-variant pb-2 mb-3" x-text="participant2"></p>
+                            <dl class="space-y-2 text-sm">
+                                <div class="flex justify-between"><dt class="text-on-surface-variant">Avg words/msg</dt><dd class="font-semibold text-on-surface" x-text="filteredData.textual_dna ? filteredData.textual_dna[1].avg_words : d.textual_dna[1].avg_words"></dd></div>
+                                <div class="flex justify-between"><dt class="text-on-surface-variant">Avg chars/msg</dt><dd class="font-semibold text-on-surface" x-text="filteredData.textual_dna ? filteredData.textual_dna[1].avg_chars : d.textual_dna[1].avg_chars"></dd></div>
+                                <div class="flex justify-between"><dt class="text-on-surface-variant">Vocab richness</dt><dd class="font-semibold text-on-surface" x-text="filteredData.textual_dna ? filteredData.textual_dna[1].vocab_richness : d.textual_dna[1].vocab_richness + '%'"></dd></div>
+                                <div class="flex justify-between"><dt class="text-on-surface-variant">Media shared</dt><dd class="font-semibold text-on-surface" x-text="filteredData.textual_dna ? filteredData.textual_dna[1].media : d.textual_dna[1].media"></dd></div>
+                                <div class="flex justify-between"><dt class="text-on-surface-variant">Abbreviation density</dt><dd class="font-semibold text-on-surface" x-text="(filteredData.abbrev_density ? filteredData.abbrev_density[1] : d.abbrev_density[1]) + '%'"></dd></div>
+                            </dl>
+                            <p class="font-mono-label text-[10px] uppercase tracking-wider text-on-surface-variant mt-4 mb-1">Msg length over time</p>
+                            <div id="dnaSparklineB"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Emoji Grid -->
+                <div class="glass-card p-6 rounded-xl">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">The Emoji Grid</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">mood</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-8">
+                        <div>
+                            <span class="font-mono-label text-xs block mb-4 border-b border-outline-variant pb-2" x-text="participant1.toUpperCase() + ' TOP 5'"></span>
+                            <ul id="emojiGridP1" class="space-y-4"></ul>
+                        </div>
+                        <div>
+                            <span class="font-mono-label text-xs block mb-4 border-b border-outline-variant pb-2" x-text="participant2.toUpperCase() + ' TOP 5'"></span>
+                            <ul id="emojiGridP2" class="space-y-4"></ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Media Breakdown -->
+                <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-3" x-show="d.media_breakdown">
+                    <div class="flex justify-between items-center mb-5">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Media Breakdown</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">perm_media</span>
+                    </div>
+                    <p class="text-xs text-on-surface-variant font-mono-label mb-5 uppercase tracking-wider" x-text="(d.total_media || 0) + ' media items shared'"></p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <p class="font-mono-label text-xs text-primary-fixed uppercase tracking-wider border-b border-outline-variant pb-2 mb-3" x-text="participant1"></p>
+                            <ul class="space-y-2">
+                                <template x-for="(e, i) in mediaEntries(d.participants[0])" :key="i">
+                                    <li class="flex items-center justify-between text-sm">
+                                        <span class="flex items-center gap-2"><span class="text-lg" x-text="e.icon"></span><span class="text-on-surface" x-text="e.label"></span></span>
+                                        <span class="font-mono-data text-primary-fixed" x-text="e.count"></span>
+                                    </li>
+                                </template>
+                            </ul>
+                            <p class="text-sm text-on-surface-variant" x-show="mediaEntries(d.participants[0]).length === 0">No media shared.</p>
+                        </div>
+                        <div>
+                            <p class="font-mono-label text-xs text-secondary uppercase tracking-wider border-b border-outline-variant pb-2 mb-3" x-text="participant2"></p>
+                            <ul class="space-y-2">
+                                <template x-for="(e, i) in mediaEntries(d.participants[1])" :key="i">
+                                    <li class="flex items-center justify-between text-sm">
+                                        <span class="flex items-center gap-2"><span class="text-lg" x-text="e.icon"></span><span class="text-on-surface" x-text="e.label"></span></span>
+                                        <span class="font-mono-data text-secondary" x-text="e.count"></span>
+                                    </li>
+                                </template>
+                            </ul>
+                            <p class="text-sm text-on-surface-variant" x-show="mediaEntries(d.participants[1]).length === 0">No media shared.</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5" x-show="hasAnyVoice || hasAnyDeleted">
+                        <div class="stat-tile flex items-center gap-3" x-show="hasAnyVoice">
+                            <span class="text-2xl">🎵</span>
+                            <div>
+                                <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Voice Note Personality</p>
+                                <p class="text-sm font-semibold text-on-surface" x-text="voiceLeaderText"></p>
+                            </div>
+                        </div>
+                        <div class="stat-tile flex items-center gap-3" x-show="hasAnyDeleted">
+                            <span class="text-2xl">🗑</span>
+                            <div>
+                                <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Message Deleter</p>
+                                <p class="text-sm font-semibold text-on-surface" x-text="deleterText"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Conversation Rhythm -->
+                <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-2">
+                    <div class="flex justify-between items-center mb-5">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Conversation Rhythm</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">calendar_month</span>
+                    </div>
+                    <div id="dayOfWeekChart" class="mb-5"></div>
+                    <div class="grid grid-cols-3 gap-3 mt-2">
+                        <div class="stat-tile">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Active Streak</p>
+                            <p class="text-xl font-bold text-primary-fixed" x-text="(d.rhythm.longest_streak_days || 0) + ' days'"></p>
+                        </div>
+                        <div class="stat-tile">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Longest Silence</p>
+                            <p class="text-lg font-bold text-on-surface" x-text="silenceText()"></p>
+                        </div>
+                        <div class="stat-tile">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Conversation Span</p>
+                            <p class="text-lg font-bold text-on-surface" x-text="(d.rhythm.span_days || 0) + ' days'"></p>
+                        </div>
+                    </div>
+                    
+                    <!-- Best Time to Message -->
+                    <div class="mt-5 pt-4 border-t border-outline-variant">
+                        <p class="font-mono-label text-[10px] uppercase tracking-wider text-on-surface-variant mb-3">⏰ Best Time to Message (highest response probability)</p>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="bg-surface-container-low p-2 rounded text-center">
+                                <span class="text-xs text-primary-fixed" x-text="participant1"></span>
+                                <p class="text-sm font-bold" x-text="filteredData.best_time_to_message ? filteredData.best_time_to_message[0] : d.best_time_to_message[0]"></p>
+                            </div>
+                            <div class="bg-surface-container-low p-2 rounded text-center">
+                                <span class="text-xs text-secondary" x-text="participant2"></span>
+                                <p class="text-sm font-bold" x-text="filteredData.best_time_to_message ? filteredData.best_time_to_message[1] : d.best_time_to_message[1]"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chronological Activity -->
+                <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-3">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Chronological Activity</h2>
+                        <div class="flex gap-2">
+                            <span class="px-2 py-1 rounded bg-primary-container/10 text-primary-fixed font-mono-label text-[10px]">BURSTINESS: <span x-text="d.burstiness_score"></span></span>
+                            <span class="px-2 py-1 rounded bg-secondary-container/10 text-secondary font-mono-label text-[10px]">PREDICTABILITY: <span x-text="d.predictability_score + '%'"></span></span>
+                        </div>
+                    </div>
+                    <div id="chronologicalChart"></div>
+                    <div class="mt-4 grid grid-cols-3 gap-4 text-center text-xs">
+                        <div>
+                            <span class="text-on-surface-variant">Peak Hour</span>
+                            <p class="font-bold text-primary-fixed" x-text="d.peak_hour_text"></p>
+                        </div>
+                        <div>
+                            <span class="text-on-surface-variant">Night Owl Index</span>
+                            <p class="font-bold" :class="d.midnight_index > 30 ? 'text-primary-fixed' : 'text-on-surface'" x-text="d.midnight_index + '%'"></p>
+                        </div>
+                        <div>
+                            <span class="text-on-surface-variant">Best Day</span>
+                            <p class="font-bold text-primary-fixed" x-text="d.best_day"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Emotional Intelligence -->
+                <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-2">
+                    <div class="flex justify-between items-center mb-5">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Emotional Intelligence</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">psychology_alt</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-6">
+                        <div>
+                            <p class="text-xs font-mono-label uppercase tracking-wider text-on-surface-variant mb-3">Sentiment Volatility</p>
+                            <div class="text-2xl font-bold" :class="d.sentiment_volatility < 0.2 ? 'text-tertiary-fixed-dim' : 'text-secondary-container'" x-text="Math.round(d.sentiment_volatility * 100) + '%'"></div>
+                            <p class="text-[10px] text-on-surface-variant mt-1" x-text="d.sentiment_volatility < 0.2 ? 'Stable emotional tone' : 'Mood swings detected'"></p>
+                        </div>
+                        <div>
+                            <p class="text-xs font-mono-label uppercase tracking-wider text-on-surface-variant mb-3">Positivity Ratio</p>
+                            <div class="text-2xl font-bold" :class="d.positivity_ratio > 0.7 ? 'text-tertiary-fixed-dim' : 'text-on-surface'" x-text="Math.round(d.positivity_ratio * 100) + '%'"></div>
+                            <p class="text-[10px] text-on-surface-variant mt-1" x-text="d.positivity_ratio > 0.7 ? 'Mostly positive vibes' : 'Neutral to mixed tone'"></p>
+                        </div>
+                    </div>
+                    <div id="sentimentTrend" class="mt-4"></div>
+                    <p class="text-xs text-on-surface-variant mt-3 text-center" x-text="d.sentiment_drift_text"></p>
+                </div>
+
+                <!-- Contextual Anomalies -->
+                <div class="glass-card p-6 rounded-xl col-span-1">
+                    <div class="flex justify-between items-center mb-8">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Contextual Anomalies</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">report_problem</span>
+                    </div>
+                    <div class="space-y-4">
+                        <div class="bg-surface-container-low p-4 rounded-lg border border-outline-variant">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="material-symbols-outlined text-primary-fixed text-sm">repeat</span>
+                                <span class="px-2 py-0.5 bg-primary-fixed text-on-primary-fixed font-bold text-[9px] rounded">FOLLOW-UPS</span>
+                            </div>
+                            <h4 class="font-headline-lg text-base mb-1">Quick Follow-ups</h4>
+                            <p class="font-body-sm text-on-surface-variant text-xs" x-text="'Detected ' + doubleTextCount + ' back-to-back message episodes.'"></p>
+                        </div>
+                        <div class="bg-surface-container-low p-4 rounded-lg border border-outline-variant">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="material-symbols-outlined text-secondary text-sm">trending_down</span>
+                                <span class="px-2 py-0.5 bg-surface-container-high text-on-surface-variant font-bold text-[9px] rounded">PATTERN SHIFT</span>
+                            </div>
+                            <h4 class="font-headline-lg text-base mb-1">Response Pattern Shift</h4>
+                            <p class="font-body-sm text-on-surface-variant text-xs" x-text="responsePatternText"></p>
+                        </div>
+                        <div class="bg-surface-container-low p-4 rounded-lg border border-outline-variant">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="material-symbols-outlined text-tertiary-fixed text-sm">verified</span>
+                                <span class="px-2 py-0.5 bg-tertiary-container text-on-tertiary-container font-bold text-[9px] rounded" :class="d.ghosting_risk === 'High' ? 'bg-secondary-container' : ''">GHOSTING RISK</span>
+                            </div>
+                            <h4 class="font-headline-lg text-base mb-1" :class="d.ghosting_risk === 'High' ? 'text-secondary-container' : ''" x-text="d.ghosting_risk || 'Low'"></h4>
+                            <p class="font-body-sm text-on-surface-variant text-xs" x-text="d.ghosting_risk === 'High' ? 'Response times have increased significantly' : 'Response patterns are stable'"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Insight Callouts -->
+                <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-3" x-show="d.insights && d.insights.length > 0">
+                    <div class="flex items-center gap-2 mb-5">
+                        <span class="material-symbols-outlined text-primary-fixed" style="font-variation-settings:'FILL' 1">auto_awesome</span>
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Pattern Detected</h2>
+                    </div>
+                    <div class="space-y-3">
+                        <template x-for="(insight, i) in d.insights" :key="i">
+                            <div class="insight-card">
+                                <span class="material-symbols-outlined text-primary-fixed-dim text-base mt-0.5" style="font-variation-settings:'FILL' 1;flex-shrink:0">auto_awesome</span>
+                                <p class="text-sm text-on-surface leading-relaxed" x-text="insight"></p>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ── Memorable Moments (Phase C3) ── -->
+            <div class="glass-card p-6 rounded-xl mt-gutter" x-show="d.memorable_moments" x-cloak>
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-2xl">✨</span>
+                    <h2 class="font-headline-lg text-xl text-primary-fixed">Memorable Moments</h2>
+                </div>
+                <p class="text-xs text-on-surface-variant font-mono-label mb-5 uppercase tracking-wider">The highlights from your entire chat history.</p>
+
+                <div class="mm-scroll">
+                    <!-- 1. First message -->
+                    <div class="mm-card" x-show="d.memorable_moments?.first_message">
+                        <span class="mm-label">🗓 First Message</span>
+                        <span class="mm-headline" x-text="d.memorable_moments?.first_message?.date_label"></span>
+                        <span class="mm-context" x-text="d.memorable_moments?.first_message?.sender + ': “' + truncate(d.memorable_moments?.first_message?.text, 60) + '”'"></span>
+                    </div>
+
+                    <!-- 2. Latest message -->
+                    <div class="mm-card" x-show="d.memorable_moments?.last_message">
+                        <span class="mm-label">🏁 Latest Message</span>
+                        <span class="mm-headline" x-text="d.memorable_moments?.last_message?.date_label"></span>
+                        <span class="mm-context" x-text="'by ' + d.memorable_moments?.last_message?.sender"></span>
+                    </div>
+
+                    <!-- 3. Longest message -->
+                    <div class="mm-card" x-show="d.memorable_moments?.longest_message">
+                        <span class="mm-label">📝 Longest Message</span>
+                        <span class="mm-headline" x-text="(d.memorable_moments?.longest_message?.word_count ?? 0) + ' words'"></span>
+                        <span class="mm-context" x-text="d.memorable_moments?.longest_message?.sender + ' · ' + d.memorable_moments?.longest_message?.date_label + ' · “' + truncate(d.memorable_moments?.longest_message?.snippet, 80) + '”'"></span>
+                    </div>
+
+                    <!-- 4. Emoji explosion (nullable) -->
+                    <div class="mm-card" x-show="d.memorable_moments?.most_emoji_day">
+                        <span class="mm-label">😂 Emoji Explosion</span>
+                        <span class="mm-emoji" x-text="d.memorable_moments?.most_emoji_day?.top_emoji"></span>
+                        <span class="mm-headline" x-text="(d.memorable_moments?.most_emoji_day?.emoji_count ?? 0) + ' emojis in one day'"></span>
+                        <span class="mm-context" x-text="d.memorable_moments?.most_emoji_day?.date_label"></span>
+                    </div>
+
+                    <!-- 5. Biggest day -->
+                    <div class="mm-card" x-show="d.memorable_moments?.biggest_day">
+                        <span class="mm-label">🔥 Biggest Day</span>
+                        <span class="mm-headline" x-text="(d.memorable_moments?.biggest_day?.msg_count ?? 0) + ' messages'"></span>
+                        <span class="mm-context" x-text="d.memorable_moments?.biggest_day?.date_label + ' · ' + d.memorable_moments?.biggest_day?.leader + ' led with ' + d.memorable_moments?.biggest_day?.leader_count"></span>
+                    </div>
+
+                    <!-- 6. Longest streak -->
+                    <div class="mm-card" x-show="d.memorable_moments?.longest_streak">
+                        <span class="mm-label">📅 Longest Streak</span>
+                        <span class="mm-headline" x-text="(d.memorable_moments?.longest_streak?.days ?? 0) + ' days straight'"></span>
+                        <span class="mm-context" x-text="d.memorable_moments?.longest_streak?.start_label + ' → ' + d.memorable_moments?.longest_streak?.end_label"></span>
+                    </div>
+
+                    <!-- 7. Longest silence -->
+                    <div class="mm-card" x-show="d.memorable_moments?.longest_silence">
+                        <span class="mm-label">🌑 Longest Silence</span>
+                        <span class="mm-headline" x-text="formatSilence(d.memorable_moments?.longest_silence?.gap_hours)"></span>
+                        <span class="mm-context" x-text="'broken by ' + d.memorable_moments?.longest_silence?.broken_by + ' · ' + d.memorable_moments?.longest_silence?.date_label"></span>
+                    </div>
+
+                    <!-- 8. Fastest reply (nullable — hidden if no qualifying reply) -->
+                    <div class="mm-card" x-show="d.memorable_moments?.fastest_reply">
+                        <span class="mm-label">⚡ Fastest Reply</span>
+                        <span class="mm-headline" x-text="(d.memorable_moments?.fastest_reply?.seconds ?? 0) + 's'"></span>
+                        <span class="mm-context" x-text="d.memorable_moments?.fastest_reply?.sender + ' → ' + d.memorable_moments?.fastest_reply?.to_whom + ' · ' + d.memorable_moments?.fastest_reply?.date_label"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Export Modal -->
+        <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md" x-show="showExportModal" x-cloak x-transition>
+            <div @click.away="showExportModal = false" class="glass-card w-full max-w-md p-8 rounded-2xl border border-outline-variant shadow-2xl">
+                <div class="flex justify-between items-start mb-6">
+                    <div>
+                        <h2 class="font-headline-lg text-2xl text-primary-fixed">Personalize Your Report</h2>
+                        <p class="text-on-surface-variant text-sm mt-1">Enter your names to tailor the export.</p>
+                    </div>
+                    <button @click="showExportModal = false" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
+                </div>
+                <div class="space-y-4 mb-8">
+                    <div class="space-y-2">
+                        <label class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant">Your Name / Alias</label>
+                        <input class="w-full bg-surface-container-low border border-outline-variant rounded-lg p-3 text-on-surface focus:border-primary-fixed focus:ring-1 focus:ring-primary-fixed transition-all outline-none" type="text" x-model="participant1">
+                    </div>
+                    <div class="space-y-2">
+                        <label class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant">Their Name / Alias</label>
+                        <input class="w-full bg-surface-container-low border border-outline-variant rounded-lg p-3 text-on-surface focus:border-primary-fixed focus:ring-1 focus:ring-primary-fixed transition-all outline-none" type="text" x-model="participant2">
+                    </div>
+                </div>
+                <button @click="generateExport" class="w-full py-4 bg-primary-fixed text-on-primary-fixed font-bold rounded-xl hover:brightness-110 transition-all active:scale-95 flex items-center justify-center gap-3">
+                    <template x-if="!exportLoading"><span>Generate &amp; Download</span></template>
+                    <template x-if="exportLoading"><span>Formatting...</span></template>
+                </button>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script>
+    dayjs.extend(window.dayjs_plugin_weekOfYear);
+    dayjs.extend(window.dayjs_plugin_customParseFormat);
+
+    (function() {
+        var icon = document.getElementById('themeIcon');
+        if (icon) icon.textContent = document.documentElement.className === 'dark' ? 'light_mode' : 'dark_mode';
+        window.addEventListener('theme-changed', function(e) {
+            if (icon) icon.textContent = e.detail === 'dark' ? 'light_mode' : 'dark_mode';
+        });
+    })();
+
+    function getChartTheme() {
+        var isDark = document.documentElement.className === 'dark';
+        return {
+            mode: isDark ? 'dark' : 'light',
+            gridColor: isDark ? '#1A1A1A' : '#E5E5E5',
+            palette: isDark
+                ? ['#5eead4', '#ff4b89', '#69f6b9', '#849495', '#ffb1c3', '#4edea3', '#ffa63d']
+                : ['#00695f', '#b3174f', '#006f4c', '#74797a', '#8f0041', '#005236', '#c85c00']
+        };
+    }
+
+    function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+        return null;
+    }
+
+    function dashboardState() {
+        return {
+            loading: true,
+            filterLoading: false,
+            showExportModal: false,
+            exportLoading: false,
+            participant1: '',
+            participant2: '',
+            summaryText: '',
+            latencyText1: '',
+            latencyText2: '',
+            responsePatternText: '',
+            sentimentDriftText: '',
+            doubleTextCount: 0,
+            latencyP1: null,
+            latencyP2: null,
+            d: null,
+            filteredData: {},
+            activeFilter: 'all',
+            customStartDate: '',
+            customEndDate: '',
+            totalMessages: 0,
+            filteredMessagesCount: 0,
+            charts: {},
+
+            get filteredSummary() {
+                if (this.activeFilter === 'all') return this.summaryText;
+                return `Showing ${this.filteredMessagesCount.toLocaleString()} messages from ${this.filterDateRange}. ${this.filteredData.summary || ''}`;
+            },
+
+            get filterDateRange() {
+                if (this.activeFilter === 'all') return 'All time';
+                if (this.activeFilter === 'month') return 'This month';
+                if (this.activeFilter === 'week') return 'This week';
+                if (this.activeFilter === 'custom' && this.customStartDate && this.customEndDate) {
+                    return `${this.customStartDate} → ${this.customEndDate}`;
+                }
+                return 'Custom range';
+            },
+
+            get filteredLatencyText1() {
+                if (!this.filteredData.latency_minutes || this.filteredData.latency_minutes[0] == null) return this.latencyText1;
+                const mins = this.filteredData.latency_minutes[0];
+                return `${Math.floor(mins)}m ${Math.round((mins % 1) * 60)}s`;
+            },
+
+            get filteredLatencyText2() {
+                if (!this.filteredData.latency_minutes || this.filteredData.latency_minutes[1] == null) return this.latencyText2;
+                const mins = this.filteredData.latency_minutes[1];
+                return `${Math.floor(mins)}m ${Math.round((mins % 1) * 60)}s`;
+            },
+
+            silenceText() {
+                if (!this.d || !this.d.rhythm) return '—';
+                const days = this.d.rhythm.longest_silence_days || 0;
+                const hrs = this.d.rhythm.longest_silence_hours || 0;
+                return days > 0 ? `${days}d ${hrs}h` : `${hrs}h`;
+            },
+
+            // ── Memorable Moments (Phase C3) helpers ──
+            truncate(text, n) {
+                if (!text) return '';
+                return text.length > n ? text.slice(0, n) + '…' : text;
+            },
+
+            // gap_hours (float) → "Xh" under a day, "X days Yh" beyond.
+            formatSilence(gapHours) {
+                if (gapHours == null) return '—';
+                if (gapHours < 24) return `${Math.round(gapHours)}h`;
+                const days = Math.floor(gapHours / 24);
+                const hrs = Math.round(gapHours % 24);
+                return `${days} day${days === 1 ? '' : 's'} ${hrs}h`;
+            },
+
+            // Which participant (0 or 1) starts/ends more sessions; -1 on a tie.
+            get sessionStartsLeader() {
+                if (!this.d || !this.d.session_initiations) return -1;
+                const a = this.d.session_initiations[this.d.participants[0]] || 0;
+                const b = this.d.session_initiations[this.d.participants[1]] || 0;
+                return a === b ? -1 : (a > b ? 0 : 1);
+            },
+
+            get sessionEndsLeader() {
+                if (!this.d || !this.d.session_endings) return -1;
+                const a = this.d.session_endings[this.d.participants[0]] || 0;
+                const b = this.d.session_endings[this.d.participants[1]] || 0;
+                return a === b ? -1 : (a > b ? 0 : 1);
+            },
+
+            // ── Media breakdown (Phase C2) ──
+            mediaIcons: {
+                images: ['🖼', 'Images'],
+                videos: ['🎥', 'Videos'],
+                audio: ['🎵', 'Voice / Audio'],
+                stickers: ['🩷', 'Stickers'],
+                gifs: ['🎬', 'GIFs'],
+                documents: ['🗒', 'Documents'],
+                locations: ['📍', 'Locations'],
+                contacts: ['👤', 'Contacts'],
+            },
+
+            // Non-zero media entries for a participant (deleted excluded — shown separately).
+            mediaEntries(name) {
+                const mb = this.d && this.d.media_breakdown && this.d.media_breakdown[name];
+                if (!mb) return [];
+                return Object.keys(this.mediaIcons)
+                    .filter(k => (mb[k] || 0) > 0)
+                    .map(k => ({ icon: this.mediaIcons[k][0], label: this.mediaIcons[k][1], count: mb[k] }));
+            },
+
+            get audioCounts() {
+                const mb = this.d && this.d.media_breakdown;
+                if (!mb) return [0, 0];
+                return [
+                    (mb[this.d.participants[0]] && mb[this.d.participants[0]].audio) || 0,
+                    (mb[this.d.participants[1]] && mb[this.d.participants[1]].audio) || 0,
+                ];
+            },
+
+            get hasAnyVoice() {
+                const [a, b] = this.audioCounts;
+                return (a + b) > 0;
+            },
+
+            get voiceLeaderText() {
+                const [a, b] = this.audioCounts;
+                const hi = Math.max(a, b), lo = Math.min(a, b);
+                const leader = a >= b ? this.participant1 : this.participant2;
+                return `${leader} sends more voice notes (${hi} vs ${lo})`;
+            },
+
+            get deletedCounts() {
+                const dm = this.d && this.d.deleted_messages;
+                if (!dm) return [0, 0];
+                return [dm[this.d.participants[0]] || 0, dm[this.d.participants[1]] || 0];
+            },
+
+            get hasAnyDeleted() {
+                const [a, b] = this.deletedCounts;
+                return (a + b) > 0;
+            },
+
+            get deleterText() {
+                const [a, b] = this.deletedCounts;
+                const cnt = Math.max(a, b);
+                const name = a >= b ? this.participant1 : this.participant2;
+                return `${name} deleted ${cnt} message${cnt === 1 ? '' : 's'}`;
+            },
+
+            setFilter(type) {
+                this.activeFilter = type;
+                if (type === 'all') {
+                    // Reset to the unfiltered analysis (no server round-trip needed).
+                    this.filteredData = JSON.parse(JSON.stringify(this.d));
+                    this.filteredMessagesCount = this.totalMessages;
+                    this.updateChartsForFilter();
+                } else if (type === 'month') {
+                    this.filterByDateRange(this.getMonthRange());
+                } else if (type === 'week') {
+                    this.filterByDateRange(this.getWeekRange());
+                }
+                // 'custom' waits for the user to pick dates (applyCustomFilter).
+            },
+
+            getMonthRange() {
+                const now = dayjs();
+                return {
+                    start: now.startOf('month').format('YYYY-MM-DD'),
+                    end: now.endOf('month').format('YYYY-MM-DD')
+                };
+            },
+
+            getWeekRange() {
+                const now = dayjs();
+                return {
+                    start: now.startOf('week').format('YYYY-MM-DD'),
+                    end: now.endOf('week').format('YYYY-MM-DD')
+                };
+            },
+
+            setQuickDate(type) {
+                let start, end;
+                const now = dayjs();
+                if (type === 'last7days') {
+                    start = now.subtract(7, 'day').format('YYYY-MM-DD');
+                    end = now.format('YYYY-MM-DD');
+                } else if (type === 'last30days') {
+                    start = now.subtract(30, 'day').format('YYYY-MM-DD');
+                    end = now.format('YYYY-MM-DD');
+                } else if (type === 'last90days') {
+                    start = now.subtract(90, 'day').format('YYYY-MM-DD');
+                    end = now.format('YYYY-MM-DD');
+                } else if (type === 'yearToDate') {
+                    start = now.startOf('year').format('YYYY-MM-DD');
+                    end = now.format('YYYY-MM-DD');
+                }
+                this.customStartDate = start;
+                this.customEndDate = end;
+                this.activeFilter = 'custom';
+                this.filterByDateRange({ start, end });
+            },
+
+            applyCustomFilter() {
+                if (this.customStartDate && this.customEndDate) {
+                    this.filterByDateRange({ start: this.customStartDate, end: this.customEndDate });
+                }
+            },
+
+            clearCustomFilter() {
+                this.customStartDate = '';
+                this.customEndDate = '';
+                this.setFilter('all');
+            },
+
+            // Server-side filtering: the parsed messages live in the session (in
+            // memory, expires after 1h). We POST the range to /filter/, which
+            // re-runs the real metric functions and returns the full metrics dict —
+            // so every card/chart is accurate, not just the few we could recompute
+            // in the browser. No raw text is sent to the client.
+            async filterByDateRange(range) {
+                this.filterLoading = true;
+                try {
+                    const resp = await fetch('/filter/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCookie('csrftoken'),
+                        },
+                        body: JSON.stringify({ date_from: range.start, date_to: range.end }),
+                    });
+                    const data = await resp.json();
+
+                    if (!resp.ok) {
+                        // Empty range → show a zeroed view; expired session → tell the user.
+                        if ((data.error || '').includes('session')) {
+                            alert(data.error);
+                            return;
+                        }
+                        this.filteredData = {
+                            ...this.d,
+                            total_messages: 0,
+                            avg_msgs_per_day: 0,
+                            message_counts: this.d.mode === 'group'
+                                ? (this.d.message_counts || []).map(() => 0)
+                                : [0, 0],
+                            latency_minutes: [null, null],
+                        };
+                        this.filteredMessagesCount = 0;
+                        this.updateChartsForFilter();
+                        return;
+                    }
+
+                    this.filteredData = data;
+                    this.filteredMessagesCount = data.total_messages || 0;
+                    this.updateChartsForFilter();
+                } catch (err) {
+                    alert('Could not apply the date filter. Please try again.');
+                } finally {
+                    this.filterLoading = false;
+                }
+            },
+
+            updateChartsForFilter() {
+                if (!this.charts) return;
+                
+                // Update volume split chart
+                if (this.charts.volumeSplit && this.filteredData.message_counts) {
+                    this.charts.volumeSplit.updateSeries([
+                        this.filteredData.message_counts[0] || 0,
+                        this.filteredData.message_counts[1] || 0
+                    ]);
+                }
+                
+                // Update velocity chart
+                if (this.charts.velocity && this.filteredData.latency_minutes) {
+                    this.charts.velocity.updateSeries([{
+                        name: 'Response Time (mins)',
+                        data: this.filteredData.latency_minutes
+                    }]);
+                }
+                
+                // Update word histogram chart
+                if (this.charts.wordHist && this.filteredData.word_histogram) {
+                    this.charts.wordHist.updateSeries([
+                        { name: this.participant1, data: this.filteredData.word_histogram[0] },
+                        { name: this.participant2, data: this.filteredData.word_histogram[1] }
+                    ]);
+                }
+            },
+
+            async init() {
+                this.d = {{ data|safe }};
+                if (!this.d) {
+                    alert('No analysis data found. Please upload a file first.');
+                    window.location.href = '/';
+                    return;
+                }
+                
+                this.participant1 = this.d.participants[0];
+                this.participant2 = this.d.participants[1];
+                this.summaryText = this.d.summary;
+                this.latencyP1 = this.d.latency_minutes[0];
+                this.latencyP2 = this.d.latency_minutes[1];
+                this.latencyText1 = this.latencyP1 != null ? `${Math.floor(this.latencyP1)}m ${Math.round((this.latencyP1 % 1) * 60)}s` : 'N/A';
+                this.latencyText2 = this.latencyP2 != null ? `${Math.floor(this.latencyP2)}m ${Math.round((this.latencyP2 % 1) * 60)}s` : 'N/A';
+                
+                const ghosting = this.d.ghosting_risk || '';
+                this.responsePatternText = ghosting === 'High' ? `${this.d.participants[0]}'s replies have slowed down recently — could be a busy period.` : 'Response times are stable — no notable pattern shift detected.';
+                
+                this.sentimentDriftText = this.d.sentiment_drift_text || (this.d.sentiment_drift > 0 ? `Positive drift of +${this.d.sentiment_drift} — tone has improved over time.` : this.d.sentiment_drift < 0 ? `Negative drift of ${this.d.sentiment_drift} — tone has declined over time.` : 'Tone has remained broadly stable throughout.');
+                this.doubleTextCount = this.d.double_text_count;
+                
+                // Raw messages are NOT shipped to the client. Date filtering is done
+                // server-side via /filter/, so we only need the total here.
+                this.totalMessages = this.d.total_messages;
+
+                this.filteredData = JSON.parse(JSON.stringify(this.d));
+                this.filteredMessagesCount = this.totalMessages;
+                
+                const grid1 = document.getElementById('emojiGridP1');
+                const grid2 = document.getElementById('emojiGridP2');
+                if (grid1) grid1.innerHTML = (this.d.top_emojis_A || []).map(e => `<li class="flex justify-between items-center emoji-bounce cursor-default"><span class="text-2xl">${e[0]}</span><span class="font-mono-data text-primary-fixed">${e[1].toLocaleString()}</span></li>`).join('');
+                if (grid2) grid2.innerHTML = (this.d.top_emojis_B || []).map(e => `<li class="flex justify-between items-center emoji-bounce cursor-default"><span class="text-2xl">${e[0]}</span><span class="font-mono-data text-secondary">${e[1].toLocaleString()}</span></li>`).join('');
+                
+                await this.$nextTick();
+                this.renderCharts(this.d);
+                this.loading = false;
+            },
+
+            renderCharts(d) {
+                const charts = {};
+                this.charts = charts;
+                const ct = getChartTheme();
+                const base = { toolbar: { show: false }, background: 'transparent' };
+
+                charts.volumeSplit = new ApexCharts(document.querySelector('#volumeSplitChart'), {
+                    chart: { ...base, type: 'donut', height: 350 },
+                    theme: { mode: ct.mode },
+                    series: [d.message_counts[0], d.message_counts[1]],
+                    labels: [d.participants[0], d.participants[1]],
+                    colors: [ct.palette[0], ct.palette[1]],
+                    legend: { position: 'bottom' }
+                });
+                charts.volumeSplit.render();
+
+                charts.velocity = new ApexCharts(document.querySelector('#velocityChart'), {
+                    chart: { ...base, type: 'bar', height: 250 },
+                    theme: { mode: ct.mode },
+                    series: [{ name: 'Response Time (mins)', data: d.latency_minutes }],
+                    plotOptions: { bar: { horizontal: true, distributed: true } },
+                    colors: [ct.palette[0], ct.palette[1]],
+                    xaxis: { categories: d.participants }
+                });
+                charts.velocity.render();
+
+                if (d.word_histogram) {
+                    charts.wordHist = new ApexCharts(document.querySelector('#wordHistogram'), {
+                        chart: { ...base, type: 'bar', height: 120, sparkline: { enabled: true } },
+                        series: [{ name: d.participants[0], data: d.word_histogram[0] }, { name: d.participants[1], data: d.word_histogram[1] }],
+                        colors: [ct.palette[0], ct.palette[1]],
+                        plotOptions: { bar: { columnWidth: '70%' } },
+                        xaxis: { categories: ['1-5', '6-15', '16-30', '31-50', '50+'] }
+                    });
+                    charts.wordHist.render();
+                }
+
+                if (d.sentiment_over_time && d.sentiment_over_time.length > 1) {
+                    charts.sentiment = new ApexCharts(document.querySelector('#sentimentTrend'), {
+                        chart: { ...base, type: 'line', height: 100, sparkline: { enabled: true } },
+                        series: [{ name: 'Sentiment', data: d.sentiment_over_time.map(s => s.score) }],
+                        colors: [ct.palette[2]],
+                        stroke: { curve: 'smooth', width: 2 }
+                    });
+                    charts.sentiment.render();
+                }
+
+                charts.chronological = new ApexCharts(document.querySelector('#chronologicalChart'), {
+                    chart: { ...base, type: 'area', height: 300 },
+                    series: [{ name: d.participants[0], data: d.hourly_A }, { name: d.participants[1], data: d.hourly_B }],
+                    colors: [ct.palette[0], ct.palette[1]],
+                    xaxis: { categories: Array.from({ length: 24 }, (_, i) => i + ':00') }
+                });
+                charts.chronological.render();
+
+                if (d.rhythm && d.rhythm.day_counts) {
+                    charts.dayOfWeek = new ApexCharts(document.querySelector('#dayOfWeekChart'), {
+                        chart: { ...base, type: 'bar', height: 160 },
+                        series: [{ name: 'Messages', data: d.rhythm.day_counts }],
+                        plotOptions: { bar: { distributed: true, columnWidth: '55%' } },
+                        colors: ct.palette,
+                        xaxis: { categories: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] }
+                    });
+                    charts.dayOfWeek.render();
+                }
+
+                const sparkOpts = (data, color) => ({
+                    chart: { ...base, type: 'line', height: 60, sparkline: { enabled: true } },
+                    series: [{ data: data.map(p => p[1]) }],
+                    colors: [color],
+                    stroke: { curve: 'smooth', width: 2 }
+                });
+
+                const dnaA = d.textual_dna && d.textual_dna[0];
+                const dnaB = d.textual_dna && d.textual_dna[1];
+                if (dnaA && dnaA.length_over_time && dnaA.length_over_time.length > 1) {
+                    charts.dnaA = new ApexCharts(document.querySelector('#dnaSparklineA'), sparkOpts(dnaA.length_over_time, ct.palette[0]));
+                    charts.dnaA.render();
+                }
+                if (dnaB && dnaB.length_over_time && dnaB.length_over_time.length > 1) {
+                    charts.dnaB = new ApexCharts(document.querySelector('#dnaSparklineB'), sparkOpts(dnaB.length_over_time, ct.palette[1]));
+                    charts.dnaB.render();
+                }
+
+                window.addEventListener('theme-changed', () => {
+                    const ct2 = getChartTheme();
+                    Object.values(charts).forEach(c => c.updateOptions({ colors: ct2.palette }));
+                });
+            },
+
+            generateExport() {
+                this.exportLoading = true;
+                this.showExportModal = false;
+                this.$nextTick(() => {
+                    const mainEl = document.querySelector('main');
+                    const isDark = document.documentElement.className === 'dark';
+                    html2canvas(mainEl, {
+                        scale: 2,
+                        useCORS: true,
+                        allowTaint: false,
+                        backgroundColor: isDark ? '#131313' : '#fafaf9',
+                        logging: false,
+                        scrollY: -window.scrollY,
+                        windowWidth: document.documentElement.scrollWidth,
+                        windowHeight: document.documentElement.scrollHeight,
+                    }).then(canvas => {
+                        const link = document.createElement('a');
+                        const p1 = (this.participant1 || 'chat').replace(/\s+/g, '-').toLowerCase();
+                        const p2 = (this.participant2 || 'export').replace(/\s+/g, '-').toLowerCase();
+                        link.download = `chat-insights-${p1}-vs-${p2}.png`;
+                        link.href = canvas.toDataURL('image/png');
+                        link.click();
+                        this.exportLoading = false;
+                    }).catch(() => {
+                        this.exportLoading = false;
+                    });
+                });
+            }
+        };
+    }
+</script>
+{% endblock %}

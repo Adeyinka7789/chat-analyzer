@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Processing | INSIGHTS_ENGINE{% endblock %}
+
+{% block extra_head %}
+<style>
+    body { overflow: hidden; }
+
+    @keyframes rotate-geometry {
+        0%   { transform: rotate(0deg) scale(1); }
+        50%  { transform: rotate(180deg) scale(1.1); }
+        100% { transform: rotate(360deg) scale(1); }
+    }
+    .animate-loader { animation: rotate-geometry 6s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+
+    .neon-pulse {
+        stroke: var(--primary-fixed-dim);
+        filter: drop-shadow(0 0 8px rgba(var(--color-primary-fixed-dim), 0.8));
+        animation: pulse-stroke 2s ease-in-out infinite;
+    }
+    @keyframes pulse-stroke {
+        0%, 100% { opacity: 1; stroke-width: 2; }
+        50%       { opacity: 0.6; stroke-width: 3; }
+    }
+
+    .terminal-cursor::after { content: '_'; animation: blink 1s step-end infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fixed inset-0 pointer-events-none z-[5]">
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary-fixed-dim/5 blur-[120px] rounded-full"></div>
+    <div class="absolute top-1/4 left-1/3 w-[400px] h-[400px] bg-tertiary-fixed-dim/5 blur-[100px] rounded-full"></div>
+</div>
+
+<div class="relative z-20 w-full max-w-2xl mx-auto flex flex-col items-center gap-12 pt-24 pb-16 px-4"
+     x-data="engineRoom()">
+
+    <!-- Loader graphic -->
+    <div class="relative w-48 h-48 md:w-64 md:h-64 flex items-center justify-center">
+        <svg class="w-full h-full animate-loader" viewBox="0 0 100 100">
+            <path d="M50 5 L90 25 L90 75 L50 95 L10 75 L10 25 Z" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"></path>
+            <path class="neon-pulse" d="M50 15 L80 32 L80 68 L50 85 L20 68 L20 32 Z" fill="none"></path>
+            <circle class="opacity-20" cx="50" cy="50" fill="none" r="10" stroke="var(--primary-fixed-dim)" stroke-width="0.5"></circle>
+            <circle class="glow-primary" cx="50" cy="50" fill="var(--primary-fixed-dim)" r="2"></circle>
+        </svg>
+        <div class="absolute -bottom-4 bg-surface-container-highest px-3 py-1 rounded-full border border-outline-variant">
+            <span class="font-mono-label text-mono-label text-primary tracking-[0.2em] uppercase">Processing_Kernel_v.04</span>
+        </div>
+    </div>
+
+    <!-- Terminal card -->
+    <div class="w-full glass-card rounded-xl p-6 md:p-8 shadow-2xl relative overflow-hidden">
+        <div class="flex gap-1.5 mb-6 opacity-30">
+            <div class="w-2.5 h-2.5 rounded-full bg-on-surface-variant/40"></div>
+            <div class="w-2.5 h-2.5 rounded-full bg-on-surface-variant/40"></div>
+            <div class="w-2.5 h-2.5 rounded-full bg-on-surface-variant/40"></div>
+        </div>
+        <div class="space-y-6">
+            <template x-for="(step, index) in steps" :key="index">
+                <div :class="step.status !== 'WAITING' ? 'opacity-100' : 'opacity-20 blur-[1px]'" class="flex flex-col gap-1 transition-all duration-500">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <span :class="step.status === 'COMPLETE' ? 'text-primary-fixed' : 'text-on-surface-variant'" class="font-mono-data text-mono-data" x-text="`${index + 1}.`"></span>
+                            <p :class="step.status === 'PROCESSING' ? 'terminal-cursor' : ''" class="font-mono-data text-mono-data text-on-surface" x-text="step.text"></p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <template x-if="step.status === 'COMPLETE'">
+                                <div class="flex items-center gap-2 text-tertiary-fixed-dim">
+                                    <span class="material-symbols-outlined text-[16px]">check_circle</span>
+                                    <span class="font-mono-label text-mono-label">OK</span>
+                                </div>
+                            </template>
+                            <template x-if="step.status === 'PROCESSING'">
+                                <div class="w-4 h-4 border-2 border-primary-fixed-dim/30 border-t-primary-fixed-dim rounded-full animate-spin"></div>
+                            </template>
+                        </div>
+                    </div>
+                    <div class="pl-7 flex items-center gap-2"
+                         x-show="step.status === 'COMPLETE'"
+                         x-transition:enter="transition ease-out duration-300"
+                         x-transition:enter-start="opacity-0 -translate-y-2"
+                         x-transition:enter-end="opacity-100 translate-y-0">
+                        <span class="text-on-surface-variant font-mono-label text-mono-label opacity-50">└</span>
+                        <span class="text-primary-fixed font-mono-data text-mono-data text-[12px] uppercase tracking-wider" x-text="step.detail"></span>
+                    </div>
+                </div>
+            </template>
+        </div>
+        <div class="mt-10 pt-6 border-t border-outline-variant flex items-center gap-4">
+            <div class="flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full bg-tertiary-container animate-pulse shadow-[0_0_8px_var(--tertiary-container)]"></div>
+                <span class="font-mono-label text-mono-label text-on-surface-variant uppercase">Core_System_Active</span>
+            </div>
+            <div class="h-4 w-[1px] bg-outline-variant"></div>
+            <span class="font-mono-label text-mono-label text-on-surface-variant/60" x-text="'ELAPSED: ' + elapsed"></span>
+        </div>
+    </div>
+
+    <div class="opacity-40">
+        <h1 class="font-mono-label text-mono-label tracking-[0.5em] text-primary-fixed uppercase glow-primary">Insights_Engine</h1>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    /* /processing/ is now rendered client-side from within the dropzone page.
+       Direct navigation here (bookmark, refresh mid-upload) falls back to home. */
+    window.location.replace('/');
+</script>
+{% endblock %}

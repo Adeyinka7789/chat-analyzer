@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+{% block title %}Chat Insights Engine{% endblock %}
+
+{% block extra_head %}
+<style>
+    .segmented-toggle {
+        display: flex;
+        gap: 0.5rem;
+        background: var(--surface-container-low);
+        border-radius: 60px;
+        padding: 0.25rem;
+        border: 1px solid var(--glass-border);
+        width: fit-content;
+        margin: 0 auto;
+    }
+    .toggle-option {
+        background: transparent;
+        border: none;
+        padding: 0.5rem 1.5rem;
+        border-radius: 60px;
+        font-weight: 500;
+        cursor: pointer;
+        color: var(--on-surface-variant);
+        transition: all 0.2s;
+        font-family: 'Inter', sans-serif;
+        font-size: 0.875rem;
+    }
+    .toggle-option.active {
+        background: var(--surface-container-high);
+        color: var(--on-surface);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    #dropzone {
+        border: 2px dashed var(--outline-variant);
+        border-radius: 1.5rem;
+        padding: 3rem 2rem;
+        transition: all 0.2s;
+        cursor: pointer;
+        background: rgba(var(--color-surface), 0.4);
+        text-align: center;
+    }
+    #dropzone p { color: var(--on-surface); }
+    #dropzone .hint { font-size: 0.875rem; color: var(--on-surface-variant); margin-top: 0.5rem; }
+    .dropzone-highlight {
+        border-color: var(--primary-fixed) !important;
+        background: rgba(var(--color-primary-fixed), 0.05) !important;
+    }
+    #analyzeBtn {
+        margin-top: 2rem;
+        border: none;
+        padding: 0.75rem 2rem;
+        border-radius: 40px;
+        font-weight: 600;
+        transition: all 0.2s;
+        cursor: not-allowed;
+        background: var(--surface-container-high);
+        color: var(--on-surface-variant);
+        font-family: 'Inter', sans-serif;
+    }
+    #analyzeBtn.ready {
+        background: linear-gradient(135deg, var(--primary-fixed-dim), var(--primary-fixed));
+        color: var(--on-primary-fixed);
+        cursor: pointer;
+    }
+    #analyzeBtn.ready:hover { filter: brightness(1.1); }
+
+    @keyframes rotate-geometry {
+        0%   { transform: rotate(0deg) scale(1); }
+        50%  { transform: rotate(180deg) scale(1.1); }
+        100% { transform: rotate(360deg) scale(1); }
+    }
+    .animate-loader { animation: rotate-geometry 6s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+
+    .neon-pulse {
+        stroke: var(--primary-fixed-dim);
+        filter: drop-shadow(0 0 8px rgba(var(--color-primary-fixed-dim), 0.8));
+        animation: pulse-stroke 2s ease-in-out infinite;
+    }
+    @keyframes pulse-stroke {
+        0%, 100% { opacity: 1; stroke-width: 2; }
+        50%       { opacity: 0.6; stroke-width: 3; }
+    }
+
+    .terminal-cursor::after { content: '_'; animation: blink 1s step-end infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div x-data="analyzeFlow()">
+
+    <!-- ── Dropzone panel ── -->
+    <div x-show="view === 'dropzone'" class="flex items-center justify-center min-h-[calc(100vh-4rem)] px-4">
+        <div class="glass-card rounded-2xl p-8 max-w-lg w-full text-center">
+            <h1 class="font-headline-lg text-display-lg font-bold text-primary-fixed mb-2">Chat Insights Engine</h1>
+            <p class="text-on-surface-variant font-body-md mb-8">Upload your WhatsApp chat export — no signup, no tracking.</p>
+
+            <div class="mb-8">
+                <div class="segmented-toggle">
+                    <button class="toggle-option" :class="selectedMode === '1v1' ? 'active' : ''" @click="selectedMode = '1v1'">💬 Personal Chat (1v1)</button>
+                    <button class="toggle-option" :class="selectedMode === 'group' ? 'active' : ''" @click="selectedMode = 'group'">👥 Group Hustle</button>
+                </div>
+            </div>
+
+            <div id="dropzone"
+                 :class="dragOver ? 'dropzone-highlight' : ''"
+                 @click="$refs.fileInput.click()"
+                 @dragover.prevent="dragOver = true"
+                 @dragleave="dragOver = false"
+                 @drop.prevent="dragOver = false; handleDrop($event)">
+                <p style="font-size:3rem">📁</p>
+                <p>Drop your WhatsApp export here (.txt or .zip)</p>
+                <p class="hint">or click to select</p>
+                <input type="file" x-ref="fileInput" accept=".txt,.zip" hidden @change="handleSelect($event)">
+            </div>
+
+            <button id="analyzeBtn"
+                    disabled
+                    :class="selectedFile ? 'ready' : ''"
+                    :disabled="!selectedFile || uploading"
+                    @click="startAnalysis()"
+                    x-text="btnLabel">Awaiting File...</button>
+
+            <p class="mt-6 text-sm text-on-surface-variant">
+                Not sure how to export?
+                <a href="/how-to-export/" class="text-primary-fixed underline hover:no-underline">See the guide →</a>
+            </p>
+        </div>
+    </div>
+
+    <!-- ── Engine Room panel ── -->
+    <div x-show="view === 'engine-room'" x-cloak class="min-h-[calc(100vh-4rem)]">
+
+        <div class="fixed inset-0 pointer-events-none z-[5]">
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-primary-fixed-dim/5 blur-[120px] rounded-full"></div>
+            <div class="absolute top-1/4 left-1/3 w-[400px] h-[400px] bg-tertiary-fixed-dim/5 blur-[100px] rounded-full"></div>
+        </div>
+
+        <div class="relative z-20 w-full max-w-2xl mx-auto flex flex-col items-center gap-12 pt-24 pb-16 px-4">
+
+            <div class="relative w-48 h-48 md:w-64 md:h-64 flex items-center justify-center">
+                <svg class="w-full h-full animate-loader" viewBox="0 0 100 100">
+                    <path d="M50 5 L90 25 L90 75 L50 95 L10 75 L10 25 Z" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"></path>
+                    <path class="neon-pulse" d="M50 15 L80 32 L80 68 L50 85 L20 68 L20 32 Z" fill="none"></path>
+                    <circle class="opacity-20" cx="50" cy="50" fill="none" r="10" stroke="var(--primary-fixed-dim)" stroke-width="0.5"></circle>
+                    <circle class="glow-primary" cx="50" cy="50" fill="var(--primary-fixed-dim)" r="2"></circle>
+                </svg>
+                <div class="absolute -bottom-4 bg-surface-container-highest px-3 py-1 rounded-full border border-outline-variant">
+                    <span class="font-mono-label text-mono-label text-primary tracking-[0.2em] uppercase">Processing_Kernel_v.04</span>
+                </div>
+            </div>
+
+            <div class="w-full glass-card rounded-xl p-6 md:p-8 shadow-2xl relative overflow-hidden">
+                <div class="flex gap-1.5 mb-6 opacity-30">
+                    <div class="w-2.5 h-2.5 rounded-full bg-on-surface-variant/40"></div>
+                    <div class="w-2.5 h-2.5 rounded-full bg-on-surface-variant/40"></div>
+                    <div class="w-2.5 h-2.5 rounded-full bg-on-surface-variant/40"></div>
+                </div>
+                <div class="space-y-6">
+                    <template x-for="(step, index) in steps" :key="index">
+                        <div :class="step.status !== 'WAITING' ? 'opacity-100' : 'opacity-20 blur-[1px]'" class="flex flex-col gap-1 transition-all duration-500">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <span :class="step.status === 'COMPLETE' ? 'text-primary-fixed' : 'text-on-surface-variant'" class="font-mono-data text-mono-data" x-text="`${index + 1}.`"></span>
+                                    <p :class="step.status === 'PROCESSING' ? 'terminal-cursor' : ''" class="font-mono-data text-mono-data text-on-surface" x-text="step.text"></p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <template x-if="step.status === 'COMPLETE'">
+                                        <div class="flex items-center gap-2 text-tertiary-fixed-dim">
+                                            <span class="material-symbols-outlined text-[16px]">check_circle</span>
+                                            <span class="font-mono-label text-mono-label">OK</span>
+                                        </div>
+                                    </template>
+                                    <template x-if="step.status === 'PROCESSING'">
+                                        <div class="w-4 h-4 border-2 border-primary-fixed-dim/30 border-t-primary-fixed-dim rounded-full animate-spin"></div>
+                                    </template>
+                                </div>
+                            </div>
+                            <div class="pl-7 flex items-center gap-2"
+                                 x-show="step.status === 'COMPLETE'"
+                                 x-transition:enter="transition ease-out duration-300"
+                                 x-transition:enter-start="opacity-0 -translate-y-2"
+                                 x-transition:enter-end="opacity-100 translate-y-0">
+                                <span class="text-on-surface-variant font-mono-label text-mono-label opacity-50">└</span>
+                                <span class="text-primary-fixed font-mono-data text-mono-data text-[12px] uppercase tracking-wider" x-text="step.detail"></span>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+                <div class="mt-10 pt-6 border-t border-outline-variant flex items-center gap-4">
+                    <div class="flex items-center gap-2">
+                        <div class="w-2 h-2 rounded-full bg-tertiary-container animate-pulse shadow-[0_0_8px_var(--tertiary-container)]"></div>
+                        <span class="font-mono-label text-mono-label text-on-surface-variant uppercase">Core_System_Active</span>
+                    </div>
+                    <div class="h-4 w-[1px] bg-outline-variant"></div>
+                    <span class="font-mono-label text-mono-label text-on-surface-variant/60" x-text="'ELAPSED: ' + elapsed"></span>
+                </div>
+            </div>
+
+            <div class="opacity-40">
+                <h1 class="font-mono-label text-mono-label tracking-[0.5em] text-primary-fixed uppercase glow-primary">Insights_Engine</h1>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+const MAX_TXT_BYTES = 10 * 1024 * 1024;
+const MAX_ZIP_BYTES = 50 * 1024 * 1024;
+
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
+}
+
+function analyzeFlow() {
+    return {
+        view: 'dropzone',
+        selectedMode: '1v1',
+        selectedFile: null,
+        dragOver: false,
+        uploading: false,
+        btnLabel: 'Awaiting File...',
+        steps: [
+            { text: 'Parsing messages...', status: 'PROCESSING', detail: '' },
+            { text: 'Computing metrics...', status: 'WAITING', detail: '' },
+        ],
+        elapsed: '0.00s',
+        _timer: null,
+
+        handleDrop(e) {
+            const file = e.dataTransfer.files[0];
+            if (file && (file.name.endsWith('.txt') || file.name.endsWith('.zip'))) this._acceptFile(file);
+        },
+
+        handleSelect(e) {
+            if (e.target.files[0]) this._acceptFile(e.target.files[0]);
+        },
+
+        _acceptFile(file) {
+            const isZip = file.name.endsWith('.zip');
+            const maxBytes = isZip ? MAX_ZIP_BYTES : MAX_TXT_BYTES;
+            if (file.size > maxBytes) {
+                alert(`File is too large. Maximum size is ${isZip ? '50 MB (compressed)' : '10 MB'}.`);
+                return;
+            }
+            this.selectedFile = file;
+            this.btnLabel = 'Analyze Chat ⚡';
+        },
+
+        async startAnalysis() {
+            if (!this.selectedFile || this.uploading) return;
+            this.uploading = true;
+
+            // Reset engine room state in case of a retry
+            this.steps[0].status = 'PROCESSING';
+            this.steps[0].detail = '';
+            this.steps[1].status = 'WAITING';
+            this.steps[1].detail = '';
+            this.elapsed = '0.00s';
+
+            // Swap to Engine Room — fetch is now in flight
+            this.view = 'engine-room';
+            history.pushState({}, '', '/processing/');
+
+            const t0 = performance.now();
+            this._timer = setInterval(() => {
+                this.elapsed = ((performance.now() - t0) / 1000).toFixed(2) + 's';
+            }, 100);
+
+            const formData = new FormData();
+            formData.append('chat_file', this.selectedFile);
+            formData.append('chat_type', this.selectedMode);
+
+            let result, ok;
+            try {
+                const response = await fetch('/upload/', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCookie('csrftoken') },
+                    body: formData,
+                });
+                result = await response.json();
+                ok = response.ok;
+            } catch (err) {
+                this._revertToDropzone();
+                alert('Network error. Please try again.');
+                return;
+            }
+
+            if (!ok) {
+                this._revertToDropzone();
+                alert('Error: ' + (result.error || 'Analysis failed'));
+                return;
+            }
+
+            // Fetch complete — mark steps done in quick succession
+            const total = result.total_messages || (result.message_counts || []).reduce((a, b) => a + b, 0);
+            this.steps[0].detail = total.toLocaleString() + ' messages parsed';
+            this.steps[0].status = 'COMPLETE';
+            await new Promise(r => setTimeout(r, 120));
+            this.steps[1].detail = 'metrics and insights computed';
+            this.steps[1].status = 'COMPLETE';
+
+            clearInterval(this._timer);
+            setTimeout(() => { window.location.href = '/dashboard/'; }, 600);
+        },
+
+        _revertToDropzone() {
+            clearInterval(this._timer);
+            this.uploading = false;
+            this.view = 'dropzone';
+            history.pushState({}, '', '/');
+        }
+    };
+}
+</script>
+{% endblock %}

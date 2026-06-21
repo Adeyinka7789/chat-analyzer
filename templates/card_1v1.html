@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ name_a }} & {{ name_b }} — Chat Analysis Card</title>
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+        --bg: #0a0a0a;
+        --card: #111318;
+        --tile: #181b22;
+        --accent: #5EEAD4;
+        --line: rgba(255,255,255,0.08);
+        --line-soft: rgba(255,255,255,0.06);
+        --muted: #9ca3af;
+    }
+    html, body {
+        background: var(--bg);
+        color: #fff;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+    }
+    body {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+    }
+    #share-card {
+        width: 540px;
+        height: 960px;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-top: 3px solid var(--accent);
+        border-radius: 20px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+    }
+
+    /* HEADER */
+    .header { padding: 24px; }
+    .app-name {
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.28em;
+    }
+    .title {
+        font-size: 34px;
+        font-weight: 800;
+        line-height: 1.15;
+        margin-top: 10px;
+    }
+    .subtitle {
+        color: var(--muted);
+        font-size: 13px;
+        margin-top: 6px;
+        letter-spacing: 0.04em;
+    }
+
+    /* HERO STATS 2x2 */
+    .hero {
+        padding: 0 24px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+    }
+    .stat {
+        background: var(--tile);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 18px 16px;
+        text-align: center;
+    }
+    .stat .num {
+        font-size: 28px;
+        font-weight: 800;
+        color: var(--accent);
+        line-height: 1.1;
+    }
+    .stat .num.emoji { font-size: 32px; color: #fff; }
+    .stat .lbl {
+        margin-top: 8px;
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+    }
+
+    /* SECTION SHELL */
+    .section { padding: 22px 24px 0; }
+    .section-label {
+        font-size: 10px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 12px;
+    }
+
+    /* WHO */
+    .who { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .person {
+        background: var(--tile);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 18px 16px;
+        text-align: center;
+    }
+    .person.leader {
+        border-color: var(--accent);
+        background: rgba(94,234,212,0.08);
+    }
+    .person .pname {
+        font-size: 17px;
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .person .pcount { font-size: 24px; font-weight: 800; color: var(--accent); margin-top: 8px; }
+    .person .pshare { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+    /* HIGHLIGHT pill */
+    .pill {
+        background: var(--tile);
+        border: 1px solid var(--line);
+        border-left: 3px solid var(--accent);
+        border-radius: 12px;
+        padding: 16px 18px;
+        font-size: 15px;
+        font-weight: 600;
+    }
+
+    /* RESPONSE SPEED */
+    .speed {
+        background: var(--tile);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 16px 18px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .speed .bolt { font-size: 22px; }
+    .speed .txt { font-size: 15px; font-weight: 600; }
+
+    /* FOOTER */
+    .footer {
+        margin-top: auto;
+        padding: 22px 24px;
+        border-top: 1px solid var(--line-soft);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 11px;
+        color: var(--muted);
+    }
+    .footer .url { color: var(--accent); font-weight: 700; }
+
+    /* DOWNLOAD BUTTON (not part of the captured card) */
+    #save-btn {
+        position: fixed;
+        right: 24px;
+        bottom: 24px;
+        z-index: 10;
+        background: var(--accent);
+        color: #07261f;
+        border: none;
+        border-radius: 999px;
+        padding: 14px 22px;
+        font-size: 14px;
+        font-weight: 700;
+        cursor: pointer;
+        box-shadow: 0 8px 24px rgba(94,234,212,0.35);
+        transition: transform 0.15s ease, filter 0.15s ease;
+    }
+    #save-btn:hover { filter: brightness(1.08); }
+    #save-btn:active { transform: scale(0.96); }
+    #save-btn[disabled] { opacity: 0.6; cursor: default; }
+</style>
+</head>
+<body>
+    <div id="share-card">
+        <!-- HEADER -->
+        <div class="header">
+            <div class="app-name">CCIE</div>
+            <div class="title">{{ name_a }} &amp; {{ name_b }}</div>
+            <div class="subtitle">Chat Analysis</div>
+        </div>
+
+        <!-- HERO STATS -->
+        <div class="hero">
+            <div class="stat">
+                <div class="num">{{ total_messages }}</div>
+                <div class="lbl">Total Messages</div>
+            </div>
+            <div class="stat">
+                <div class="num">{{ span_days }} days</div>
+                <div class="lbl">Chat Span</div>
+            </div>
+            <div class="stat">
+                <div class="num" style="font-size:20px;">{{ most_active_month }}</div>
+                <div class="lbl">Most Active Month</div>
+            </div>
+            <div class="stat">
+                <div class="num emoji">{{ top_emoji }}</div>
+                <div class="lbl">Top Emoji</div>
+            </div>
+        </div>
+
+        <!-- WHO -->
+        <div class="section">
+            <div class="section-label">Who Talked More</div>
+            <div class="who">
+                <div class="person {% if leader_a %}leader{% endif %}">
+                    <div class="pname">{{ name_a }}</div>
+                    <div class="pcount">{{ count_a }}</div>
+                    <div class="pshare">{{ share_a }}% of messages</div>
+                </div>
+                <div class="person {% if leader_b %}leader{% endif %}">
+                    <div class="pname">{{ name_b }}</div>
+                    <div class="pcount">{{ count_b }}</div>
+                    <div class="pshare">{{ share_b }}% of messages</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- HIGHLIGHT -->
+        {% if highlight %}
+        <div class="section">
+            <div class="section-label">Highlight</div>
+            <div class="pill">{{ highlight }}</div>
+        </div>
+        {% endif %}
+
+        <!-- RESPONSE SPEED -->
+        {% if speed_text %}
+        <div class="section">
+            <div class="section-label">Response Speed</div>
+            <div class="speed">
+                <span class="bolt">⚡</span>
+                <span class="txt">{{ speed_text }}</span>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- FOOTER -->
+        <div class="footer">
+            <span>Analyzed by CCIE</span>
+            <span class="url">ccie.app</span>
+        </div>
+    </div>
+
+    <button id="save-btn" onclick="saveCard()">⬇ Save Card</button>
+
+    <script>
+        function saveCard() {
+            var btn = document.getElementById('save-btn');
+            btn.disabled = true;
+            btn.textContent = 'Saving…';
+            var script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+            script.onload = function () {
+                html2canvas(document.getElementById('share-card'), {
+                    scale: 2,
+                    backgroundColor: '#0a0a0a',
+                    width: 540,
+                    height: 960,
+                    useCORS: false,
+                    logging: false
+                }).then(function (canvas) {
+                    var link = document.createElement('a');
+                    link.download = 'my-chat-analysis.png';
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                    btn.disabled = false;
+                    btn.textContent = '⬇ Save Card';
+                });
+            };
+            script.onerror = function () {
+                btn.disabled = false;
+                btn.textContent = '⬇ Save Card';
+                alert('Could not load the image library. Check your connection and try again.');
+            };
+            document.head.appendChild(script);
+        }
+    </script>
+</body>
+</html>

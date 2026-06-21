@@ -1,0 +1,711 @@
+{% extends "base.html" %}
+{% block title %}Group Chat Insights | Contextual Chat Insights{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+    .rank-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.6rem 0;
+        border-bottom: 1px solid var(--outline-variant);
+    }
+    .rank-row:last-child { border-bottom: none; }
+    .rank-num {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px;
+        color: var(--on-surface-variant);
+        width: 20px;
+        text-align: right;
+        flex-shrink: 0;
+    }
+    .rank-name {
+        flex: 1;
+        font-size: 14px;
+        color: var(--on-surface);
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .rank-val {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 13px;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+    .rank-bar-wrap {
+        width: 80px;
+        height: 4px;
+        background: var(--outline-variant);
+        border-radius: 2px;
+        overflow: hidden;
+        flex-shrink: 0;
+    }
+    .rank-bar { height: 100%; border-radius: 2px; background: var(--primary-fixed-dim); }
+    .shift-up   { color: var(--tertiary-fixed-dim); }
+    .shift-down { color: var(--secondary-container); }
+    .shift-flat { color: var(--on-surface-variant); }
+    .stat-tile {
+        background: var(--surface-container-low);
+        border: 1px solid var(--outline-variant);
+        border-radius: 0.5rem;
+        padding: 1rem 1.25rem;
+    }
+    .warning-banner {
+        background: rgba(255, 75, 137, 0.12);
+        border: 1px solid var(--secondary-container);
+        border-radius: 0.5rem;
+        padding: 0.75rem 1rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 14px;
+        color: var(--secondary);
+    }
+    .insight-card {
+        background: var(--surface-container-low);
+        border: 1px solid var(--outline-variant);
+        border-left: 3px solid var(--primary-fixed-dim);
+        border-radius: 0.5rem;
+        padding: 0.875rem 1rem;
+        display: flex;
+        gap: 0.75rem;
+        align-items: flex-start;
+    }
+    /* ── Memorable Moments (Phase C3) ── */
+    .mm-scroll {
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: 80%;
+        gap: 1rem;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        padding-bottom: 0.5rem;
+    }
+    .mm-scroll::-webkit-scrollbar { display: none; }
+    @media (min-width: 768px) {
+        .mm-scroll {
+            grid-auto-flow: row;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-auto-columns: auto;
+            overflow-x: visible;
+        }
+    }
+    .mm-card {
+        scroll-snap-align: start;
+        background: var(--surface-container-low);
+        border: 1px solid var(--outline-variant);
+        border-top: 3px solid var(--primary-fixed-dim);
+        border-radius: 0.5rem;
+        padding: 1rem 1.25rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        transition: transform 0.2s ease;
+    }
+    .mm-card:hover { transform: translateY(-2px); }
+    .mm-label {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--on-surface-variant);
+    }
+    .mm-headline {
+        font-size: 1.5rem;
+        font-weight: 700;
+        line-height: 1.1;
+        color: var(--primary-fixed);
+    }
+    .mm-context {
+        font-size: 12px;
+        line-height: 1.4;
+        color: var(--on-surface-variant);
+    }
+</style>
+{% endblock %}
+
+{% block site_header %}{% endblock %}
+{% block site_footer %}{% endblock %}
+
+{% block content %}
+<div x-data="groupDashboard()" x-init="init()" x-cloak>
+
+    <!-- Top nav -->
+    <nav class="fixed top-0 left-0 w-full z-50 flex items-center justify-between px-margin-desktop h-20 bg-surface/80 backdrop-blur-xl border-b border-outline-variant">
+        <span class="font-headline-lg text-headline-lg font-bold text-primary-fixed">Group Chat Engine</span>
+        <div class="flex items-center gap-4">
+            <a href="/analytics/" class="hidden md:flex items-center gap-2 px-4 py-2 rounded-full border border-outline-variant text-on-surface-variant hover:text-on-surface text-sm transition-colors">
+                <span class="material-symbols-outlined text-lg">bar_chart</span>
+                <span>Analytics</span>
+            </a>
+            <a href="/" class="hidden md:flex items-center gap-2 px-4 py-2 rounded-full border border-outline-variant text-on-surface-variant hover:text-on-surface text-sm transition-colors">
+                <span class="material-symbols-outlined text-lg">upload_file</span>
+                <span>New Analysis</span>
+            </a>
+            <button @click="window.open('/card/', '_blank')" class="flex items-center gap-2 px-4 py-2 rounded-full border border-primary-fixed text-primary-fixed font-bold text-sm hover:bg-primary-fixed/10 transition-all active:scale-95">
+                <span>✨ Share Card</span>
+            </button>
+            <button @click="showExportModal = true" class="hidden md:flex items-center gap-2 px-6 py-2 rounded-full bg-primary-fixed text-on-primary-fixed font-bold text-sm hover:brightness-110 transition-all active:scale-95">
+                <span class="material-symbols-outlined text-lg">download</span>
+                <span>Export Report</span>
+            </button>
+            <button onclick="toggleTheme()" class="text-on-surface-variant hover:text-primary-fixed transition-colors" aria-label="Toggle theme">
+                <span class="material-symbols-outlined" id="themeIcon">light_mode</span>
+            </button>
+        </div>
+    </nav>
+
+    <main class="pt-28 pb-16 px-margin-desktop min-h-screen max-w-[1200px] mx-auto">
+
+        <div x-show="loading" class="glass-card p-8 text-center rounded-xl">
+            <div class="animate-pulse text-primary-fixed">Loading group insights...</div>
+        </div>
+
+        <div x-show="!loading" x-cloak>
+
+            <!-- Mode warning -->
+            <template x-if="d.mode_warning">
+                <div class="warning-banner">
+                    <span class="material-symbols-outlined text-base">info</span>
+                    <span x-text="d.mode_warning"></span>
+                </div>
+            </template>
+
+            <!-- Summary header -->
+            <header class="glass-card p-8 rounded-xl mb-gutter border-l-4 border-primary-fixed">
+                <div class="flex flex-col md:flex-row items-start md:items-center gap-6">
+                    <div class="flex-1">
+                        <h1 class="font-display-lg text-display-lg mb-2 text-primary-fixed" x-text="'Group of ' + d.participants.length"></h1>
+                        <p class="text-on-surface-variant text-sm font-mono-label" x-text="d.total_messages.toLocaleString() + ' messages · ' + d.participants.length + ' participants'"></p>
+                    </div>
+                    <div class="flex flex-wrap gap-3">
+                        <template x-for="(p, i) in d.participants" :key="i">
+                            <span class="px-3 py-1 rounded-full bg-surface-container-high border border-outline-variant text-sm text-on-surface font-medium" x-text="p"></span>
+                        </template>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Main grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-gutter">
+
+                <!-- Volume Breakdown chart -->
+                <div class="glass-card p-6 rounded-xl lg:col-span-2">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Volume Breakdown</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">bar_chart</span>
+                    </div>
+                    <div id="volumeChart"></div>
+                </div>
+
+                <!-- Power Dynamics (Who breaks the silence) -->
+                <div class="glass-card p-6 rounded-xl">
+                    <div class="flex justify-between items-center mb-5">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Power Dynamics</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">balance</span>
+                    </div>
+                    <p class="text-xs text-on-surface-variant font-mono-label mb-4 uppercase tracking-wider">Who breaks the silence — % after 6h+ gap</p>
+                    <div>
+                        <template x-for="(item, i) in d.initiation_ranked" :key="i">
+                            <div class="rank-row">
+                                <span class="rank-num" x-text="i + 1 + '.'"></span>
+                                <span class="rank-name" x-text="item.name"></span>
+                                <div class="rank-bar-wrap"><div class="rank-bar" :style="'width:' + item.pct + '%'"></div></div>
+                                <span class="rank-val text-primary-fixed" x-text="item.pct + '%'"></span>
+                            </div>
+                        </template>
+                        <template x-if="!d.initiation_ranked || d.initiation_ranked.length === 0">
+                            <p class="text-on-surface-variant text-sm">No initiation data — conversation may be too short.</p>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Response Velocity -->
+                <div class="glass-card p-6 rounded-xl">
+                    <div class="flex justify-between items-center mb-5">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Response Velocity</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">speed</span>
+                    </div>
+                    <p class="text-xs text-on-surface-variant font-mono-label mb-4 uppercase tracking-wider">Average time-to-reply · fastest first</p>
+                    <div>
+                        <template x-for="(item, i) in d.latency_ranked_minutes" :key="i">
+                            <div class="rank-row">
+                                <span class="rank-num" x-text="i + 1 + '.'"></span>
+                                <span class="rank-name" x-text="item.name"></span>
+                                <span class="rank-val" :class="i === 0 ? 'text-tertiary-fixed-dim' : 'text-on-surface-variant'" x-text="formatMins(item.minutes)"></span>
+                            </div>
+                        </template>
+                        <template x-if="!d.latency_ranked_minutes || d.latency_ranked_minutes.length === 0">
+                            <p class="text-on-surface-variant text-sm">Not enough reply data.</p>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Activity Shift -->
+                <div class="glass-card p-6 rounded-xl">
+                    <div class="flex justify-between items-center mb-5">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Most Active This Week</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">trending_up</span>
+                    </div>
+                    <p class="text-xs text-on-surface-variant font-mono-label mb-4 uppercase tracking-wider">This week vs previous week</p>
+                    <div>
+                        <template x-for="(item, i) in d.activity_shift_ranked" :key="i">
+                            <div class="rank-row">
+                                <span class="rank-num" x-text="i + 1 + '.'"></span>
+                                <span class="rank-name" x-text="item.name"></span>
+                                <span class="rank-val text-on-surface-variant text-xs" x-text="item.last_week + ' → ' + item.this_week"></span>
+                                <span class="rank-val text-sm" :class="item.shift > 0 ? 'shift-up' : item.shift < 0 ? 'shift-down' : 'shift-flat'"
+                                      x-text="(item.shift > 0 ? '↑' : item.shift < 0 ? '↓' : '→') + Math.abs(item.shift)"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Double-texts -->
+                <div class="glass-card p-6 rounded-xl">
+                    <div class="flex justify-between items-center mb-5">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Quick Follow-ups</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">repeat</span>
+                    </div>
+                    <p class="text-xs text-on-surface-variant font-mono-label mb-4 uppercase tracking-wider">Back-to-back messages within 5 min</p>
+                    <div>
+                        <template x-for="(item, i) in d.double_text_ranked.filter(x => x.count > 0)" :key="i">
+                            <div class="rank-row">
+                                <span class="rank-num" x-text="i + 1 + '.'"></span>
+                                <span class="rank-name" x-text="item.name"></span>
+                                <span class="rank-val text-secondary-container" x-text="item.count"></span>
+                            </div>
+                        </template>
+                        <template x-if="d.double_text_ranked.every(x => x.count === 0)">
+                            <p class="text-on-surface-variant text-sm">No double-texts detected.</p>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Sync Snapshot + Conversation Pulse -->
+                <div class="glass-card p-6 rounded-xl lg:col-span-2">
+                    <div class="flex justify-between items-center mb-5">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Sync Snapshot</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">sync</span>
+                    </div>
+                    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+                        <div class="stat-tile">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Total Messages</p>
+                            <p class="text-2xl font-bold text-primary-fixed" x-text="d.total_messages.toLocaleString()"></p>
+                        </div>
+                        <div class="stat-tile">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Avg / Day</p>
+                            <p class="text-2xl font-bold text-primary-fixed" x-text="d.avg_msgs_per_day"></p>
+                        </div>
+                        <div class="stat-tile">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Most Active Month</p>
+                            <p class="text-lg font-bold text-on-surface" x-text="d.most_active_month || '—'"></p>
+                        </div>
+                        <div class="stat-tile">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Midnight Oil</p>
+                            <p class="text-2xl font-bold text-primary-fixed" x-text="d.midnight_index + '%'"></p>
+                            <p class="text-xs text-on-surface-variant mt-1">msgs between 11pm–4am</p>
+                        </div>
+                        <div class="stat-tile">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Tone Over Time</p>
+                            <p class="text-2xl font-bold" :class="d.sentiment_drift >= 0 ? 'text-tertiary-fixed-dim' : 'text-secondary-container'" x-text="(d.sentiment_drift >= 0 ? '+' : '') + d.sentiment_drift"></p>
+                            <p class="text-xs text-on-surface-variant mt-1" x-text="d.sentiment_drift >= 0 ? 'tone improving' : 'tone declining'"></p>
+                        </div>
+                        <div class="stat-tile">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Quietest Member</p>
+                            <p class="text-lg font-bold text-on-surface truncate" x-text="d.quietest_member ? d.quietest_member.name : '—'"></p>
+                            <p class="text-xs text-on-surface-variant mt-1" x-text="d.quietest_member ? d.quietest_member.count.toLocaleString() + ' messages' : ''"></p>
+                        </div>
+                        <div class="stat-tile">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Top Session Starter</p>
+                            <p class="text-lg font-bold text-on-surface truncate" x-text="d.top_session_initiator && d.top_session_initiator.name ? d.top_session_initiator.name : '—'"></p>
+                            <p class="text-xs text-on-surface-variant mt-1" x-text="d.top_session_initiator && d.top_session_initiator.name ? d.top_session_initiator.count + ' of ' + d.sessions_total + ' sessions' : ''"></p>
+                        </div>
+                        <div class="stat-tile">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Top Session Ender</p>
+                            <p class="text-lg font-bold text-on-surface truncate" x-text="d.top_session_ender && d.top_session_ender.name ? d.top_session_ender.name : '—'"></p>
+                            <p class="text-xs text-on-surface-variant mt-1" x-text="d.top_session_ender && d.top_session_ender.name ? d.top_session_ender.count + ' of ' + d.sessions_total + ' sessions' : ''"></p>
+                        </div>
+                        <div class="stat-tile">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Total Media</p>
+                            <p class="text-2xl font-bold text-primary-fixed" x-text="(d.total_media || 0).toLocaleString()"></p>
+                        </div>
+                        <div class="stat-tile" x-show="d.voice_note_leader && d.voice_note_leader.count > 0">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Voice Note Leader</p>
+                            <p class="text-lg font-bold text-on-surface truncate" x-text="d.voice_note_leader && d.voice_note_leader.name ? '🎵 ' + d.voice_note_leader.name : '—'"></p>
+                            <p class="text-xs text-on-surface-variant mt-1" x-text="d.voice_note_leader ? d.voice_note_leader.count + ' voice notes' : ''"></p>
+                        </div>
+                        <div class="stat-tile" x-show="topDeleter()">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Most Deletions</p>
+                            <p class="text-lg font-bold text-on-surface truncate" x-text="topDeleter() ? '🗑 ' + topDeleter().name : '—'"></p>
+                            <p class="text-xs text-on-surface-variant mt-1" x-text="topDeleter() ? topDeleter().count + ' deleted' : ''"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Group Pulse chart -->
+                <div class="glass-card p-6 rounded-xl lg:col-span-2">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Group Pulse</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">show_chart</span>
+                    </div>
+                    <div id="pulseChart"></div>
+                </div>
+
+                <!-- Emoji Ratio -->
+                <div class="glass-card p-6 rounded-xl">
+                    <div class="flex justify-between items-center mb-5">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Emoji Usage Ratio</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">mood</span>
+                    </div>
+                    <p class="text-xs text-on-surface-variant font-mono-label mb-4 uppercase tracking-wider">Text chars per emoji · higher = more text-heavy</p>
+                    <div>
+                        <template x-for="(item, i) in d.emoji_ratio_ranked" :key="i">
+                            <div class="rank-row">
+                                <span class="rank-num" x-text="i + 1 + '.'"></span>
+                                <span class="rank-name" x-text="item.name"></span>
+                                <span class="rank-val text-on-surface-variant" x-text="item.ratio + ':1'"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Media Shared breakdown -->
+                <div class="glass-card p-6 rounded-xl" x-show="totalMediaShared() > 0">
+                    <div class="flex justify-between items-center mb-5">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Media Shared</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">perm_media</span>
+                    </div>
+                    <p class="text-xs text-on-surface-variant font-mono-label mb-4 uppercase tracking-wider">Images, videos, audio &amp; stickers per person</p>
+                    <div>
+                        <template x-for="([name, count], i) in mediaSorted()" :key="i">
+                            <div class="rank-row">
+                                <span class="rank-num" x-text="i + 1 + '.'"></span>
+                                <span class="rank-name" x-text="name"></span>
+                                <span class="rank-val text-primary-fixed" x-text="count"></span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Textual DNA (ranked) -->
+                <div class="glass-card p-6 rounded-xl lg:col-span-2" x-show="d.textual_dna_ranked && d.textual_dna_ranked.length > 0">
+                    <div class="flex justify-between items-center mb-5">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Textual DNA</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">genetics</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="text-on-surface-variant font-mono-label text-[10px] uppercase tracking-wider border-b border-outline-variant">
+                                    <th class="text-left pb-2">Participant</th>
+                                    <th class="text-right pb-2">Avg Words</th>
+                                    <th class="text-right pb-2">Avg Chars</th>
+                                    <th class="text-right pb-2">Vocab Richness</th>
+                                    <th class="text-right pb-2">Media</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="(item, i) in d.textual_dna_ranked" :key="i">
+                                    <tr class="border-b border-outline-variant last:border-0">
+                                        <td class="py-2 font-medium text-on-surface" x-text="item.name"></td>
+                                        <td class="py-2 text-right font-mono-data text-on-surface-variant" x-text="item.avg_words"></td>
+                                        <td class="py-2 text-right font-mono-data text-on-surface-variant" x-text="item.avg_chars"></td>
+                                        <td class="py-2 text-right font-mono-data text-primary-fixed" x-text="item.vocab_richness + '%'"></td>
+                                        <td class="py-2 text-right font-mono-data text-on-surface-variant" x-text="item.media"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Conversation Rhythm -->
+                <div class="glass-card p-6 rounded-xl lg:col-span-2" x-show="d.rhythm">
+                    <div class="flex justify-between items-center mb-5">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Conversation Rhythm</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">calendar_month</span>
+                    </div>
+                    <div id="groupDayOfWeekChart" class="mb-5"></div>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div class="stat-tile">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Active Streak</p>
+                            <p class="text-xl font-bold text-primary-fixed" x-text="(d.rhythm && d.rhythm.longest_streak_days || 0) + ' days'"></p>
+                        </div>
+                        <div class="stat-tile">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Longest Silence</p>
+                            <p class="text-lg font-bold text-on-surface" x-text="groupSilenceText()"></p>
+                        </div>
+                        <div class="stat-tile">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Conversation Span</p>
+                            <p class="text-lg font-bold text-on-surface" x-text="(d.rhythm && d.rhythm.span_days || 0) + ' days'"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Insight Callouts -->
+                <div class="glass-card p-6 rounded-xl lg:col-span-2" x-show="d.insights && d.insights.length > 0">
+                    <div class="flex items-center gap-2 mb-5">
+                        <span class="material-symbols-outlined text-primary-fixed" style="font-variation-settings:'FILL' 1">auto_awesome</span>
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Pattern Detected</h2>
+                    </div>
+                    <div class="space-y-3">
+                        <template x-for="(insight, i) in d.insights" :key="i">
+                            <div class="insight-card">
+                                <span class="material-symbols-outlined text-primary-fixed-dim text-base mt-0.5" style="font-variation-settings:'FILL' 1;flex-shrink:0">auto_awesome</span>
+                                <p class="text-sm text-on-surface leading-relaxed" x-text="insight"></p>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ── Memorable Moments (Phase C3) ── -->
+            <div class="glass-card p-6 rounded-xl mt-gutter" x-show="d.memorable_moments" x-cloak>
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-2xl">✨</span>
+                    <h2 class="font-headline-lg text-xl text-primary-fixed">Memorable Moments</h2>
+                </div>
+                <p class="text-xs text-on-surface-variant font-mono-label mb-5 uppercase tracking-wider">The highlights from your entire chat history.</p>
+
+                <div class="mm-scroll">
+                    <!-- First message -->
+                    <div class="mm-card" x-show="d.memorable_moments?.first_message">
+                        <span class="mm-label">🗓 First Message</span>
+                        <span class="mm-headline" x-text="d.memorable_moments?.first_message?.date_label"></span>
+                        <span class="mm-context" x-text="d.memorable_moments?.first_message?.sender + ': “' + truncate(d.memorable_moments?.first_message?.text, 60) + '”'"></span>
+                    </div>
+
+                    <!-- Biggest day -->
+                    <div class="mm-card" x-show="d.memorable_moments?.biggest_day">
+                        <span class="mm-label">🔥 Biggest Day</span>
+                        <span class="mm-headline" x-text="(d.memorable_moments?.biggest_day?.msg_count ?? 0) + ' messages'"></span>
+                        <span class="mm-context" x-text="d.memorable_moments?.biggest_day?.date_label + ' · ' + d.memorable_moments?.biggest_day?.leader + ' led with ' + d.memorable_moments?.biggest_day?.leader_count"></span>
+                    </div>
+
+                    <!-- Longest streak -->
+                    <div class="mm-card" x-show="d.memorable_moments?.longest_streak">
+                        <span class="mm-label">📅 Longest Streak</span>
+                        <span class="mm-headline" x-text="(d.memorable_moments?.longest_streak?.days ?? 0) + ' days straight'"></span>
+                        <span class="mm-context" x-text="d.memorable_moments?.longest_streak?.start_label + ' → ' + d.memorable_moments?.longest_streak?.end_label"></span>
+                    </div>
+
+                    <!-- Longest silence -->
+                    <div class="mm-card" x-show="d.memorable_moments?.longest_silence">
+                        <span class="mm-label">🌑 Longest Silence</span>
+                        <span class="mm-headline" x-text="formatSilence(d.memorable_moments?.longest_silence?.gap_hours)"></span>
+                        <span class="mm-context" x-text="'broken by ' + d.memorable_moments?.longest_silence?.broken_by + ' · ' + d.memorable_moments?.longest_silence?.date_label"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Export Modal -->
+        <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md" x-show="showExportModal" x-cloak x-transition>
+            <div @click.away="showExportModal = false" class="glass-card w-full max-w-sm p-8 rounded-2xl border border-outline-variant shadow-2xl">
+                <div class="flex justify-between items-start mb-6">
+                    <div>
+                        <h2 class="font-headline-lg text-2xl text-primary-fixed">Export Dashboard</h2>
+                        <p class="text-on-surface-variant text-sm mt-1">Download a PNG snapshot of this group report.</p>
+                    </div>
+                    <button @click="showExportModal = false" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
+                </div>
+                <button @click="generateExport" class="w-full py-4 bg-primary-fixed text-on-primary-fixed font-bold rounded-xl hover:brightness-110 transition-all active:scale-95 flex items-center justify-center gap-3">
+                    <template x-if="!exportLoading"><span>Download PNG</span></template>
+                    <template x-if="exportLoading"><span>Capturing...</span></template>
+                </button>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script>
+    (function() {
+        var icon = document.getElementById('themeIcon');
+        if (icon) icon.textContent = document.documentElement.className === 'dark' ? 'light_mode' : 'dark_mode';
+        window.addEventListener('theme-changed', function(e) {
+            if (icon) icon.textContent = e.detail === 'dark' ? 'light_mode' : 'dark_mode';
+        });
+    })();
+
+    function getChartTheme() {
+        var isDark = document.documentElement.className === 'dark';
+        return {
+            mode: isDark ? 'dark' : 'light',
+            gridColor: isDark ? '#1A1A1A' : '#E5E5E5',
+            palette: isDark
+                ? ['#5eead4', '#ff4b89', '#69f6b9', '#849495', '#ffb1c3', '#4edea3']
+                : ['#00695f', '#b3174f', '#006f4c', '#74797a', '#8f0041', '#005236']
+        };
+    }
+
+    function groupDashboard() {
+        return {
+            loading: true,
+            d: null,
+            charts: {},
+            showExportModal: false,
+            exportLoading: false,
+
+            async init() {
+                this.d = {{ data|safe }};
+                if (!this.d) { window.location.href = '/'; return; }
+                await this.$nextTick();
+                this.renderCharts();
+                this.loading = false;
+            },
+
+            formatMins(m) {
+                if (m == null) return 'N/A';
+                const mins = Math.floor(m);
+                const secs = Math.round((m % 1) * 60);
+                return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+            },
+
+            groupSilenceText() {
+                if (!this.d || !this.d.rhythm) return '—';
+                const days = this.d.rhythm.longest_silence_days || 0;
+                const hrs = this.d.rhythm.longest_silence_hours || 0;
+                return days > 0 ? `${days}d ${hrs}h` : `${hrs}h`;
+            },
+
+            totalMediaShared() {
+                if (!this.d || !this.d.media_shared) return 0;
+                return Object.values(this.d.media_shared).reduce((a, b) => a + b, 0);
+            },
+
+            mediaSorted() {
+                if (!this.d || !this.d.media_shared) return [];
+                return Object.entries(this.d.media_shared).sort((a, b) => b[1] - a[1]);
+            },
+
+            // Top deleter across the group, or null if nobody deleted anything.
+            topDeleter() {
+                const dm = this.d && this.d.deleted_messages;
+                if (!dm) return null;
+                const entries = Object.entries(dm);
+                if (!entries.length) return null;
+                entries.sort((a, b) => b[1] - a[1]);
+                return { name: entries[0][0], count: entries[0][1] };
+            },
+
+            // ── Memorable Moments (Phase C3) helpers ──
+            truncate(text, n) {
+                if (!text) return '';
+                return text.length > n ? text.slice(0, n) + '…' : text;
+            },
+
+            formatSilence(gapHours) {
+                if (gapHours == null) return '—';
+                if (gapHours < 24) return `${Math.round(gapHours)}h`;
+                const days = Math.floor(gapHours / 24);
+                const hrs = Math.round(gapHours % 24);
+                return `${days} day${days === 1 ? '' : 's'} ${hrs}h`;
+            },
+
+            renderCharts() {
+                const d = this.d;
+                const ct = getChartTheme();
+                const base = { toolbar: { show: false }, background: 'transparent' };
+
+                // Volume bar (horizontal)
+                const volH = Math.max(180, d.volume_ranked.length * 44);
+                this.charts.volume = new ApexCharts(document.querySelector('#volumeChart'), {
+                    chart: { ...base, type: 'bar', height: volH },
+                    theme: { mode: ct.mode },
+                    grid: { borderColor: ct.gridColor },
+                    series: [{ name: 'Messages', data: d.volume_ranked.map(v => v.count) }],
+                    plotOptions: { bar: { horizontal: true, distributed: true, barHeight: '60%' } },
+                    colors: ct.palette,
+                    xaxis: { categories: d.volume_ranked.map(v => v.name) },
+                    legend: { show: false },
+                    dataLabels: { enabled: true, formatter: v => v.toLocaleString() }
+                });
+                this.charts.volume.render();
+
+                // Conversation Rhythm — day of week
+                if (d.rhythm && d.rhythm.day_counts) {
+                    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+                    this.charts.dayOfWeek = new ApexCharts(document.querySelector('#groupDayOfWeekChart'), {
+                        chart: { ...base, type: 'bar', height: 160 },
+                        theme: { mode: ct.mode },
+                        grid: { borderColor: ct.gridColor },
+                        series: [{ name: 'Messages', data: d.rhythm.day_counts }],
+                        plotOptions: { bar: { distributed: true, columnWidth: '55%', borderRadius: 3 } },
+                        colors: ct.palette,
+                        xaxis: { categories: days, labels: { style: { fontSize: '11px' } } },
+                        legend: { show: false },
+                        dataLabels: { enabled: false },
+                        tooltip: { y: { formatter: v => v.toLocaleString() + ' msgs' } }
+                    });
+                    this.charts.dayOfWeek.render();
+                }
+
+                // Group Pulse line chart
+                if (d.group_pulse && d.group_pulse.length > 1) {
+                    this.charts.pulse = new ApexCharts(document.querySelector('#pulseChart'), {
+                        chart: { ...base, type: 'area', height: 260 },
+                        theme: { mode: ct.mode },
+                        grid: { borderColor: ct.gridColor },
+                        series: [{ name: 'Messages', data: d.group_pulse.map(p => p[1]) }],
+                        colors: [ct.palette[0]],
+                        stroke: { curve: 'smooth', width: 2 },
+                        fill: { type: 'gradient', gradient: { opacityFrom: 0.35, opacityTo: 0 } },
+                        xaxis: {
+                            categories: d.group_pulse.map(p => p[0]),
+                            tickAmount: Math.min(12, d.group_pulse.length),
+                            labels: { rotate: -35, style: { fontSize: '11px' } }
+                        },
+                        tooltip: { x: { format: 'yyyy-MM-dd' } }
+                    });
+                    this.charts.pulse.render();
+                }
+
+                window.addEventListener('theme-changed', () => {
+                    const ct2 = getChartTheme();
+                    Object.values(this.charts).forEach(c => c.updateOptions({
+                        theme: { mode: ct2.mode },
+                        grid: { borderColor: ct2.gridColor },
+                        colors: ct2.palette
+                    }));
+                });
+            },
+
+            generateExport() {
+                this.exportLoading = true;
+                this.showExportModal = false;
+                this.$nextTick(() => {
+                    const mainEl = document.querySelector('main');
+                    const isDark = document.documentElement.className === 'dark';
+                    html2canvas(mainEl, {
+                        scale: 2,
+                        useCORS: true,
+                        allowTaint: false,
+                        backgroundColor: isDark ? '#131313' : '#fafaf9',
+                        logging: false,
+                        scrollY: -window.scrollY,
+                        windowWidth: document.documentElement.scrollWidth,
+                        windowHeight: document.documentElement.scrollHeight,
+                    }).then(canvas => {
+                        const link = document.createElement('a');
+                        const groupSize = (this.d && this.d.participants) ? this.d.participants.length : 'group';
+                        link.download = `group-insights-${groupSize}-participants.png`;
+                        link.href = canvas.toDataURL('image/png');
+                        link.click();
+                        this.exportLoading = false;
+                    }).catch(() => {
+                        this.exportLoading = false;
+                    });
+                });
+            }
+        };
+    }
+</script>
+{% endblock %}

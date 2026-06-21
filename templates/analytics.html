@@ -1,0 +1,1024 @@
+{% extends "base.html" %}
+{% block title %}Analytics | Contextual Chat Insights{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/dayjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/plugin/weekOfYear.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.10/plugin/customParseFormat.js"></script>
+<style>
+    /* ── Date range filter (copied from dashboard.html for identical UI) ── */
+    .filter-chip {
+        padding: 0.5rem 1rem;
+        border-radius: 2rem;
+        background: var(--surface-container-high);
+        color: var(--on-surface-variant);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+    .filter-chip.active {
+        background: var(--primary-fixed);
+        color: var(--on-primary-fixed);
+    }
+    .filter-chip:hover:not(.active) {
+        background: var(--surface-container-highest);
+    }
+    .date-range-picker {
+        background: var(--surface-container-low);
+        border: 1px solid var(--outline-variant);
+        border-radius: 0.5rem;
+        padding: 0.5rem;
+    }
+    .filter-stats {
+        background: var(--surface-container-lowest);
+        border-radius: 0.5rem;
+        padding: 0.75rem 1rem;
+        font-size: 0.875rem;
+    }
+    .stat-tile {
+        background: var(--surface-container-low);
+        border: 1px solid var(--outline-variant);
+        border-radius: 0.5rem;
+        padding: 1rem 1.25rem;
+    }
+    .insight-card {
+        background: var(--surface-container-low);
+        border: 1px solid var(--outline-variant);
+        border-left: 3px solid var(--primary-fixed-dim);
+        border-radius: 0.5rem;
+        padding: 0.875rem 1rem;
+        display: flex;
+        gap: 0.75rem;
+        align-items: flex-start;
+    }
+    .spark-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid var(--outline-variant);
+    }
+    .spark-row:last-child { border-bottom: none; }
+    .spark-name {
+        width: 110px;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--on-surface);
+        flex-shrink: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .spark-mini { flex: 1; min-width: 0; }
+    .ratio-bar-wrap {
+        height: 8px;
+        border-radius: 4px;
+        background: var(--outline-variant);
+        overflow: hidden;
+        margin-top: 4px;
+    }
+    .ratio-bar-fill { height: 100%; border-radius: 4px; }
+</style>
+{% endblock %}
+
+{% block site_header %}{% endblock %}
+{% block site_footer %}{% endblock %}
+
+{% block content %}
+<div x-data="analyticsState()" x-init="init()" x-cloak>
+
+    <!-- Top nav -->
+    <nav class="fixed top-0 left-0 w-full z-50 flex items-center justify-between px-margin-desktop h-20 bg-surface/80 backdrop-blur-xl border-b border-outline-variant shadow-[0_0_40px_rgba(var(--color-primary-fixed),0.1)]">
+        <span class="font-headline-lg text-headline-lg font-bold text-primary-fixed">Contextual Chat Engine</span>
+        <div class="flex items-center gap-4">
+            <button @click="showExportModal = true" class="hidden md:flex items-center gap-2 px-6 py-2 rounded-full bg-primary-fixed text-on-primary-fixed font-bold text-sm hover:brightness-110 transition-all active:scale-95">
+                <span class="material-symbols-outlined text-lg">download</span>
+                <span>Export Report</span>
+            </button>
+            <button onclick="toggleTheme()" class="text-on-surface-variant hover:text-primary-fixed transition-colors" aria-label="Toggle theme">
+                <span class="material-symbols-outlined" id="themeIcon">light_mode</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Side nav (desktop) -->
+    <aside class="fixed left-0 top-20 h-[calc(100vh-80px)] w-64 z-40 bg-surface-container-lowest/90 backdrop-blur-xl border-r border-outline-variant hidden md:flex flex-col p-6">
+        <nav class="flex-1 space-y-2">
+            <a href="/dashboard/" class="flex items-center gap-3 px-4 py-3 rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-all">
+                <span class="material-symbols-outlined">dashboard</span>
+                <span class="font-body-md">Dashboard</span>
+            </a>
+            <div class="flex items-center gap-3 px-4 py-3 rounded-lg bg-primary-container/20 text-primary-fixed border-r-4 border-primary-fixed transition-all cursor-default">
+                <span class="material-symbols-outlined">bar_chart</span>
+                <span class="font-body-md">Analytics</span>
+            </div>
+        </nav>
+        <a href="/" class="flex items-center gap-2 text-on-surface-variant hover:text-on-surface text-sm transition-colors mt-4">
+            <span class="material-symbols-outlined text-base">upload_file</span>
+            <span>New Analysis</span>
+        </a>
+    </aside>
+
+    <!-- Main content -->
+    <main class="md:ml-64 pt-28 pb-12 px-margin-desktop min-h-screen">
+        <div class="glass-card p-8 text-center rounded-xl" x-show="loading" x-cloak>
+            <div class="animate-pulse text-primary-fixed">Loading deep analytics...</div>
+        </div>
+        <div x-show="!loading" x-cloak>
+
+            <!-- ── FILTER BAR (copied from dashboard.html — identical UI/behavior) ── -->
+            <div class="glass-card p-6 rounded-xl mb-gutter">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex flex-wrap gap-2">
+                        <button @click="setFilter('all')" :class="{'active': activeFilter === 'all'}" class="filter-chip">📅 All Time</button>
+                        <button @click="setFilter('month')" :class="{'active': activeFilter === 'month'}" class="filter-chip">📆 This Month</button>
+                        <button @click="setFilter('week')" :class="{'active': activeFilter === 'week'}" class="filter-chip">📊 This Week</button>
+                        <button @click="setFilter('custom')" :class="{'active': activeFilter === 'custom'}" class="filter-chip">🎯 Custom Range</button>
+                    </div>
+
+                    <div x-show="activeFilter === 'custom'" class="date-range-picker flex gap-2 items-center" x-transition.duration.200ms>
+                        <input type="date" x-model="customStartDate" @change="applyCustomFilter" class="bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm">
+                        <span>→</span>
+                        <input type="date" x-model="customEndDate" @change="applyCustomFilter" class="bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm">
+                        <button @click="clearCustomFilter" class="text-on-surface-variant hover:text-primary-fixed">✕</button>
+                    </div>
+
+                    <div class="filter-stats" x-show="filteredMessagesCount !== totalMessages">
+                        <span class="material-symbols-outlined text-sm align-middle mr-1">filter_alt</span>
+                        Showing <strong x-text="filteredMessagesCount.toLocaleString()"></strong> of <strong x-text="totalMessages.toLocaleString()"></strong> messages
+                        <button @click="setFilter('all')" class="ml-2 text-primary-fixed text-sm underline">Clear filter</button>
+                    </div>
+                </div>
+
+                <!-- Quick date shortcuts -->
+                <div class="flex flex-wrap gap-2 mt-4 pt-4 border-t border-outline-variant">
+                    <span class="text-xs text-on-surface-variant self-center">Quick views:</span>
+                    <button @click="setQuickDate('last7days')" class="text-xs px-3 py-1 rounded-full bg-surface-container-high hover:bg-surface-container-highest">Last 7 days</button>
+                    <button @click="setQuickDate('last30days')" class="text-xs px-3 py-1 rounded-full bg-surface-container-high hover:bg-surface-container-highest">Last 30 days</button>
+                    <button @click="setQuickDate('last90days')" class="text-xs px-3 py-1 rounded-full bg-surface-container-high hover:bg-surface-container-highest">Last 90 days</button>
+                    <button @click="setQuickDate('yearToDate')" class="text-xs px-3 py-1 rounded-full bg-surface-container-high hover:bg-surface-container-highest">Year to date</button>
+                </div>
+
+                <!-- Shown briefly while a server-side filter request is in flight -->
+                <p x-show="filterLoading" x-cloak class="text-sm text-on-surface-variant mt-3">
+                    <span class="material-symbols-outlined text-sm align-middle animate-spin">progress_activity</span>
+                    Recomputing metrics for the selected range…
+                </p>
+            </div>
+
+            <!-- ── Conversation Timeline header ── -->
+            <header class="glass-card p-8 rounded-xl mb-gutter border-l-4 border-primary-fixed">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="material-symbols-outlined text-primary-fixed">timeline</span>
+                    <h1 class="font-headline-lg text-xl text-primary-fixed">Deep Analytics</h1>
+                    <span class="ml-auto px-3 py-1 rounded-full bg-surface-container-high border border-outline-variant font-mono-label text-[10px] text-on-surface-variant uppercase tracking-wider" x-text="d.mode === '1v1' ? '1 vs 1' : 'Group · ' + d.participants.length + ' members'"></span>
+                </div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="stat-tile">
+                        <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">First Message</p>
+                        <p class="text-base font-bold text-on-surface" x-text="d.rhythm && d.rhythm.first_date ? d.rhythm.first_date : '—'"></p>
+                    </div>
+                    <div class="stat-tile">
+                        <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Last Message</p>
+                        <p class="text-base font-bold text-on-surface" x-text="d.rhythm && d.rhythm.last_date ? d.rhythm.last_date : '—'"></p>
+                    </div>
+                    <div class="stat-tile">
+                        <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Total Span</p>
+                        <p class="text-2xl font-bold text-primary-fixed" x-text="(d.rhythm && d.rhythm.span_days || 0) + ' days'"></p>
+                    </div>
+                    <div class="stat-tile">
+                        <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Peak Month</p>
+                        <p class="text-base font-bold text-on-surface" x-text="d.most_active_month || '—'"></p>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Main analytics grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-gutter">
+
+                <!-- ── 24-Hour Distribution ── -->
+                <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-2">
+                    <div class="flex justify-between items-center mb-2">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">24-Hour Activity Breakdown</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">schedule</span>
+                    </div>
+                    <p class="text-xs text-on-surface-variant font-mono-label mb-5 uppercase tracking-wider">Combined message volume by hour of day</p>
+                    <div id="hourlyChart"></div>
+                    <div class="grid grid-cols-2 gap-4 mt-4">
+                        <div class="stat-tile">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Peak Hour</p>
+                            <p class="text-2xl font-bold text-primary-fixed" x-text="peakHourText"></p>
+                        </div>
+                        <div class="stat-tile">
+                            <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Late-Night Window</p>
+                            <p class="text-2xl font-bold text-primary-fixed" x-text="lateNightCount + ' msgs'"></p>
+                            <p class="text-xs text-on-surface-variant mt-1">11pm – 4am</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Midnight Oil + Streak ── -->
+                <div class="glass-card p-6 rounded-xl col-span-1 flex flex-col gap-5">
+                    <div class="flex justify-between items-start">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Night Patterns</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">bedtime</span>
+                    </div>
+
+                    <div class="flex flex-col items-center py-4">
+                        <div class="relative w-32 h-32 flex items-center justify-center rounded-full" :style="midnightGlowStyle()">
+                            <div class="absolute inset-0 rounded-full border-4 border-outline-variant"></div>
+                            <div id="midnightArcChart"></div>
+                            <div class="relative z-10 text-center">
+                                <p class="text-3xl font-bold text-primary-fixed" x-text="midnightPct + '%'"></p>
+                                <p class="font-mono-label text-[9px] uppercase tracking-wider text-on-surface-variant">night msgs</p>
+                            </div>
+                        </div>
+                        <p class="text-sm text-on-surface-variant text-center mt-3 max-w-[180px]" x-text="midnightContext()"></p>
+                    </div>
+
+                    <div class="space-y-3 border-t border-outline-variant pt-4">
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs text-on-surface-variant font-mono-label uppercase tracking-wider">Longest Streak</span>
+                            <span class="font-bold text-primary-fixed" x-text="(d.rhythm && d.rhythm.longest_streak_days || 0) + ' days'"></span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs text-on-surface-variant font-mono-label uppercase tracking-wider">Longest Silence</span>
+                            <span class="font-bold text-on-surface" x-text="silenceText()"></span>
+                        </div>
+                        <div class="flex justify-between items-center" x-show="d.mode === '1v1' && d.verdict">
+                            <span class="text-xs text-on-surface-variant font-mono-label uppercase tracking-wider">Sync Rating</span>
+                            <span class="font-bold text-sm px-2 py-0.5 rounded bg-primary-container/20 text-primary-fixed" x-text="d.verdict"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── 1v1: Text-to-Emoji Ratio ── -->
+                <template x-if="d.mode === '1v1'">
+                    <div class="glass-card p-6 rounded-xl col-span-1">
+                        <div class="flex justify-between items-center mb-2">
+                            <h2 class="font-headline-lg text-xl text-primary-fixed">Text vs Emoji</h2>
+                            <span class="material-symbols-outlined text-on-surface-variant">mood</span>
+                        </div>
+                        <p class="text-xs text-on-surface-variant font-mono-label mb-5 uppercase tracking-wider">Characters per emoji — higher = more text-heavy</p>
+                        <div id="ratioChart"></div>
+                        <div class="mt-4 space-y-3">
+                            <template x-for="(ratio, i) in d.text_to_emoji_ratio" :key="i">
+                                <div>
+                                    <div class="flex justify-between items-center text-sm mb-1">
+                                        <span class="font-medium text-on-surface" x-text="d.participants[i]"></span>
+                                        <span class="font-mono-data text-on-surface-variant" x-text="Math.round(ratio) + ':1'"></span>
+                                    </div>
+                                    <div class="ratio-bar-wrap">
+                                        <div class="ratio-bar-fill" :style="'width:' + ratioBarPct(i) + '%;background:' + (i===0 ? 'var(--primary-fixed-dim)' : 'var(--secondary-container)')"></div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                        <p class="text-[10px] text-on-surface-variant mt-4 font-mono-label">Ratio excludes media placeholders. Emoji counted by Unicode range U+10000–U+10FFFF.</p>
+                    </div>
+                </template>
+
+                <!-- ── 1v1: Initiation Breakdown ── -->
+                <template x-if="d.mode === '1v1'">
+                    <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-2">
+                        <div class="flex justify-between items-center mb-2">
+                            <h2 class="font-headline-lg text-xl text-primary-fixed">Initiation Breakdown</h2>
+                            <span class="material-symbols-outlined text-on-surface-variant">record_voice_over</span>
+                        </div>
+                        <p class="text-xs text-on-surface-variant font-mono-label mb-5 uppercase tracking-wider">Who restarts conversation after 6+ hour silence</p>
+                        <div id="initiationChart"></div>
+                        <div class="grid grid-cols-2 gap-4 mt-4">
+                            <div class="stat-tile">
+                                <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1" x-text="d.participants[0]"></p>
+                                <p class="text-2xl font-bold text-primary-fixed" x-text="(d.initiation_counts && d.initiation_counts[0]) || 0"></p>
+                                <p class="text-xs text-on-surface-variant mt-1">conversation starts</p>
+                            </div>
+                            <div class="stat-tile">
+                                <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1" x-text="d.participants[1]"></p>
+                                <p class="text-2xl font-bold text-secondary" x-text="(d.initiation_counts && d.initiation_counts[1]) || 0"></p>
+                                <p class="text-xs text-on-surface-variant mt-1">conversation starts</p>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- ── Group: Per-person length sparklines ── -->
+                <template x-if="d.mode === 'group'">
+                    <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-3">
+                        <div class="flex justify-between items-center mb-2">
+                            <h2 class="font-headline-lg text-xl text-primary-fixed">Message Length Over Time</h2>
+                            <span class="material-symbols-outlined text-on-surface-variant">show_chart</span>
+                        </div>
+                        <p class="text-xs text-on-surface-variant font-mono-label mb-5 uppercase tracking-wider">Average message length trend per participant</p>
+                        <div id="groupSparklines" class="space-y-1">
+                            <template x-for="(member, i) in sparkMembers()" :key="i">
+                                <div class="spark-row">
+                                    <span class="spark-name" x-text="member.name"></span>
+                                    <div class="spark-mini" :id="'spark-' + i"></div>
+                                    <span class="font-mono-data text-[11px] text-on-surface-variant w-16 text-right flex-shrink-0" x-text="member.avg_chars + ' ch/msg'"></span>
+                                </div>
+                            </template>
+                        </div>
+                        <template x-if="!d.textual_dna_ranked || d.textual_dna_ranked.length === 0">
+                            <p class="text-on-surface-variant text-sm">No textual DNA data available.</p>
+                        </template>
+                    </div>
+                </template>
+
+                <!-- ── Group: Initiation Depth ── -->
+                <template x-if="d.mode === 'group'">
+                    <div class="glass-card p-6 rounded-xl col-span-1">
+                        <div class="flex justify-between items-center mb-2">
+                            <h2 class="font-headline-lg text-xl text-primary-fixed">Initiation Depth</h2>
+                            <span class="material-symbols-outlined text-on-surface-variant">record_voice_over</span>
+                        </div>
+                        <p class="text-xs text-on-surface-variant font-mono-label mb-4 uppercase tracking-wider">Conversation starts by member</p>
+                        <div id="groupInitiationChart"></div>
+                    </div>
+                </template>
+
+                <!-- ── Group: Sentiment + Quick Follow-ups side tiles ── -->
+                <template x-if="d.mode === 'group'">
+                    <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-2">
+                        <div class="flex justify-between items-center mb-2">
+                            <h2 class="font-headline-lg text-xl text-primary-fixed">Tone &amp; Engagement</h2>
+                            <span class="material-symbols-outlined text-on-surface-variant">psychology</span>
+                        </div>
+                        <p class="text-xs text-on-surface-variant font-mono-label mb-5 uppercase tracking-wider">Sentiment drift and follow-up patterns</p>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="stat-tile">
+                                <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Tone Drift</p>
+                                <p class="text-2xl font-bold" :class="d.sentiment_drift >= 0 ? 'text-tertiary-fixed-dim' : 'text-secondary-container'"
+                                   x-text="(d.sentiment_drift >= 0 ? '+' : '') + d.sentiment_drift"></p>
+                                <p class="text-xs text-on-surface-variant mt-1" x-text="d.sentiment_drift >= 0 ? 'tone improving' : 'tone declining'"></p>
+                            </div>
+                            <div class="stat-tile">
+                                <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Midnight Oil</p>
+                                <p class="text-2xl font-bold text-primary-fixed" x-text="midnightPct + '%'"></p>
+                                <p class="text-xs text-on-surface-variant mt-1">msgs between 11pm–4am</p>
+                            </div>
+                            <div class="stat-tile col-span-2">
+                                <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-2">Top Quick Follow-up Senders</p>
+                                <template x-for="(item, i) in (d.double_text_ranked || []).filter(x => x.count > 0).slice(0,3)" :key="i">
+                                    <div class="flex justify-between items-center py-1 border-b border-outline-variant last:border-0">
+                                        <span class="text-sm text-on-surface" x-text="item.name"></span>
+                                        <span class="font-mono-data text-secondary-container font-bold" x-text="item.count + ' follow-ups'"></span>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- ── 1v1: Response Pattern Depth ── -->
+                <template x-if="d.mode === '1v1'">
+                    <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-3">
+                        <div class="flex justify-between items-center mb-2">
+                            <h2 class="font-headline-lg text-xl text-primary-fixed">Response Pattern Depth</h2>
+                            <span class="material-symbols-outlined text-on-surface-variant">compare_arrows</span>
+                        </div>
+                        <p class="text-xs text-on-surface-variant font-mono-label mb-5 uppercase tracking-wider">Directional response latency and engagement signals</p>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div class="stat-tile">
+                                <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1" x-text="(d.participants[0] || 'A') + ' → ' + (d.participants[1] || 'B')"></p>
+                                <p class="text-2xl font-bold text-primary-fixed" x-text="latFmt(d.latency_minutes && d.latency_minutes[0])"></p>
+                                <p class="text-xs text-on-surface-variant mt-1">avg reply time</p>
+                            </div>
+                            <div class="stat-tile">
+                                <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1" x-text="(d.participants[1] || 'B') + ' → ' + (d.participants[0] || 'A')"></p>
+                                <p class="text-2xl font-bold text-secondary" x-text="latFmt(d.latency_minutes && d.latency_minutes[1])"></p>
+                                <p class="text-xs text-on-surface-variant mt-1">avg reply time</p>
+                            </div>
+                            <div class="stat-tile">
+                                <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Quick Follow-ups</p>
+                                <p class="text-2xl font-bold text-on-surface" x-text="d.double_text_count || 0"></p>
+                                <p class="text-xs text-on-surface-variant mt-1">back-to-back episodes</p>
+                            </div>
+                            <div class="stat-tile">
+                                <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Response Pattern</p>
+                                <p class="text-base font-bold" :class="d.ghosting_risk === 'High' ? 'text-secondary-container' : 'text-tertiary-fixed-dim'" x-text="d.ghosting_risk === 'High' ? 'Slowing Down' : d.ghosting_risk === 'Low' ? 'Stable' : '—'"></p>
+                                <p class="text-xs text-on-surface-variant mt-1">vs earlier window</p>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- ── Pattern Detected (analytics insights) ── -->
+                <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-3" x-show="d.insights && d.insights.length > 0">
+                    <div class="flex items-center gap-2 mb-5">
+                        <span class="material-symbols-outlined text-primary-fixed" style="font-variation-settings:'FILL' 1">auto_awesome</span>
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Pattern Detected</h2>
+                    </div>
+                    <div class="space-y-3">
+                        <template x-for="(insight, i) in d.insights" :key="i">
+                            <div class="insight-card">
+                                <span class="material-symbols-outlined text-primary-fixed-dim text-base mt-0.5" style="font-variation-settings:'FILL' 1;flex-shrink:0">auto_awesome</span>
+                                <p class="text-sm text-on-surface leading-relaxed" x-text="insight"></p>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ── 📞 Call Analysis (hidden when the export has no calls) ── -->
+            <section class="mt-gutter" x-show="d.call_stats && d.call_stats.has_data" x-cloak>
+                <div class="flex items-center gap-2 mb-gutter mt-2">
+                    <span class="text-2xl">📞</span>
+                    <h2 class="font-headline-lg text-xl text-primary-fixed">Call Analysis</h2>
+                    <span class="ml-auto px-3 py-1 rounded-full bg-surface-container-high border border-outline-variant font-mono-label text-[10px] text-on-surface-variant uppercase tracking-wider" x-text="(d.call_stats.total_calls || 0) + ' calls'"></span>
+                </div>
+
+                <!-- ROW 1 — hero stat tiles -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-gutter">
+                    <div class="glass-card p-5 rounded-xl">
+                        <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Total Calls</p>
+                        <p class="text-3xl font-bold text-primary-fixed" x-text="d.call_stats.total_calls"></p>
+                        <p class="text-xs text-on-surface-variant mt-1" x-text="d.call_stats.total_voice_calls + ' voice · ' + d.call_stats.total_video_calls + ' video'"></p>
+                    </div>
+                    <div class="glass-card p-5 rounded-xl">
+                        <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Answered</p>
+                        <p class="text-3xl font-bold text-tertiary-fixed-dim" x-text="d.call_stats.answered_calls"></p>
+                        <p class="text-xs text-on-surface-variant mt-1" x-text="Math.round(d.call_stats.answer_rate * 100) + '% answer rate'"></p>
+                    </div>
+                    <div class="glass-card p-5 rounded-xl">
+                        <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Missed</p>
+                        <p class="text-3xl font-bold text-secondary-container" x-text="d.call_stats.missed_calls"></p>
+                        <p class="text-xs text-on-surface-variant mt-1">unanswered calls</p>
+                    </div>
+                    <div class="glass-card p-5 rounded-xl">
+                        <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Avg Duration</p>
+                        <p class="text-3xl font-bold text-primary-fixed" x-text="d.call_stats.answered_calls > 0 ? formatDuration(d.call_stats.avg_call_duration_seconds) : '—'"></p>
+                        <p class="text-xs text-on-surface-variant mt-1">answered calls only</p>
+                    </div>
+                </div>
+
+                <!-- ROW 2 — who calls more -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-gutter">
+                    <template x-for="p in callPeople()" :key="p.name">
+                        <div class="glass-card p-6 rounded-xl"
+                             :class="p.name === d.call_stats.who_calls_more ? 'border-l-4 border-primary-fixed' : ''">
+                            <div class="flex items-center justify-between mb-4">
+                                <h3 class="font-headline-lg text-lg text-on-surface" x-text="p.name"></h3>
+                                <span x-show="p.name === d.call_stats.who_calls_more" class="px-2 py-0.5 rounded-full bg-primary-container/20 text-primary-fixed font-mono-label text-[10px] uppercase tracking-wider">Calls more</span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Initiated</p>
+                                    <p class="text-2xl font-bold text-primary-fixed" x-text="p.initiated"></p>
+                                </div>
+                                <div>
+                                    <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Voice / Video</p>
+                                    <p class="text-2xl font-bold text-on-surface"><span x-text="p.voice"></span><span class="text-on-surface-variant text-base"> | </span><span x-text="p.video"></span></p>
+                                </div>
+                                <div>
+                                    <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Total talk time</p>
+                                    <p class="text-lg font-bold text-on-surface" x-text="formatTalkTime(p.total_duration_seconds)"></p>
+                                </div>
+                                <div>
+                                    <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Avg call length</p>
+                                    <p class="text-lg font-bold text-on-surface" x-text="p.avg_duration_seconds > 0 ? formatDuration(p.avg_duration_seconds) : '—'"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- ROW 3 — call patterns -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-gutter mb-gutter">
+                    <div class="glass-card p-6 rounded-xl">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="font-headline-lg text-lg text-primary-fixed">Calls by Day</h3>
+                            <span class="material-symbols-outlined text-on-surface-variant">calendar_month</span>
+                        </div>
+                        <p class="text-xs text-on-surface-variant font-mono-label mb-5 uppercase tracking-wider">Which weekday calls happen on</p>
+                        <div id="callsByDayChart"></div>
+                    </div>
+                    <div class="glass-card p-6 rounded-xl">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="font-headline-lg text-lg text-primary-fixed">Calls by Hour</h3>
+                            <span class="material-symbols-outlined text-on-surface-variant">schedule</span>
+                        </div>
+                        <p class="text-xs text-on-surface-variant font-mono-label mb-5 uppercase tracking-wider">Hour of day calls happen</p>
+                        <div id="callsByHourChart"></div>
+                    </div>
+                </div>
+
+                <!-- ROW 4 — highlights -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="stat-tile">
+                        <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Most Active Call Day</p>
+                        <p class="text-lg font-bold text-primary-fixed" x-text="d.call_stats.most_active_call_day || '—'"></p>
+                        <p class="text-xs text-on-surface-variant mt-1">most calls happen then</p>
+                    </div>
+                    <div class="stat-tile">
+                        <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Longest Call</p>
+                        <template x-if="d.call_stats.longest_call">
+                            <div>
+                                <p class="text-lg font-bold text-on-surface">
+                                    <span x-text="formatDuration(d.call_stats.longest_call.duration_seconds)"></span>
+                                    <span class="ml-1 px-2 py-0.5 rounded-full bg-surface-container-high text-[10px] font-mono-label uppercase tracking-wider align-middle" x-text="d.call_stats.longest_call.call_type"></span>
+                                </p>
+                                <p class="text-xs text-on-surface-variant mt-1" x-text="(d.call_stats.longest_call.caller || '—') + ' · ' + d.call_stats.longest_call.date_label"></p>
+                            </div>
+                        </template>
+                        <template x-if="!d.call_stats.longest_call">
+                            <p class="text-lg font-bold text-on-surface">—</p>
+                        </template>
+                    </div>
+                    <div class="stat-tile">
+                        <p class="font-mono-label text-[10px] uppercase tracking-widest text-on-surface-variant mb-1">Call Streak</p>
+                        <p class="text-lg font-bold text-primary-fixed" x-text="d.call_stats.call_streak + (d.call_stats.call_streak === 1 ? ' day' : ' days')"></p>
+                        <p class="text-xs text-on-surface-variant mt-1">consecutive days with calls</p>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+
+        <!-- Export Modal -->
+        <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md" x-show="showExportModal" x-cloak x-transition>
+            <div @click.away="showExportModal = false" class="glass-card w-full max-w-sm p-8 rounded-2xl border border-outline-variant shadow-2xl">
+                <div class="flex justify-between items-start mb-6">
+                    <div>
+                        <h2 class="font-headline-lg text-2xl text-primary-fixed">Export Analytics</h2>
+                        <p class="text-on-surface-variant text-sm mt-1">Download a PNG snapshot of this analytics report.</p>
+                    </div>
+                    <button @click="showExportModal = false" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
+                </div>
+                <button @click="generateExport" class="w-full py-4 bg-primary-fixed text-on-primary-fixed font-bold rounded-xl hover:brightness-110 transition-all active:scale-95 flex items-center justify-center gap-3">
+                    <template x-if="!exportLoading"><span>Download PNG</span></template>
+                    <template x-if="exportLoading"><span>Capturing...</span></template>
+                </button>
+            </div>
+        </div>
+    </main>
+</div>
+
+<script>
+    (function() {
+        var icon = document.getElementById('themeIcon');
+        if (icon) icon.textContent = document.documentElement.className === 'dark' ? 'light_mode' : 'dark_mode';
+        window.addEventListener('theme-changed', function(e) {
+            if (icon) icon.textContent = e.detail === 'dark' ? 'light_mode' : 'dark_mode';
+        });
+    })();
+
+    if (window.dayjs && window.dayjs_plugin_weekOfYear) dayjs.extend(window.dayjs_plugin_weekOfYear);
+    if (window.dayjs && window.dayjs_plugin_customParseFormat) dayjs.extend(window.dayjs_plugin_customParseFormat);
+
+    function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+        return null;
+    }
+
+    function getChartTheme() {
+        var isDark = document.documentElement.className === 'dark';
+        return {
+            mode: isDark ? 'dark' : 'light',
+            gridColor: isDark ? '#1A1A1A' : '#E5E5E5',
+            palette: isDark
+                ? ['#5eead4', '#ff4b89', '#69f6b9', '#849495', '#ffb1c3', '#4edea3']
+                : ['#00695f', '#b3174f', '#006f4c', '#74797a', '#8f0041', '#005236']
+        };
+    }
+
+    function analyticsState() {
+        return {
+            loading: true,
+            showExportModal: false,
+            exportLoading: false,
+            d: null,
+            originalData: null,
+            charts: {},
+            peakHourText: '—',
+            lateNightCount: 0,
+            midnightPct: 0,
+
+            // Date filter state (mirrors dashboard.html)
+            filterLoading: false,
+            activeFilter: 'all',
+            customStartDate: '',
+            customEndDate: '',
+            totalMessages: 0,
+            filteredMessagesCount: 0,
+
+            silenceText() {
+                if (!this.d || !this.d.rhythm) return '—';
+                const days = this.d.rhythm.longest_silence_days || 0;
+                const hrs = this.d.rhythm.longest_silence_hours || 0;
+                return days > 0 ? `${days}d ${hrs}h` : `${hrs}h`;
+            },
+
+            midnightGlowStyle() {
+                const pct = this.midnightPct;
+                if (pct > 40) return 'box-shadow:0 0 24px rgba(94,234,212,0.35)';
+                if (pct > 20) return 'box-shadow:0 0 14px rgba(94,234,212,0.18)';
+                return '';
+            },
+
+            midnightContext() {
+                const pct = this.midnightPct;
+                if (pct > 50) return 'Predominantly a night-owl conversation.';
+                if (pct > 30) return 'Strong late-night activity pattern.';
+                if (pct > 15) return 'Some late-night messaging detected.';
+                return 'Mostly daytime conversation.';
+            },
+
+            ratioBarPct(i) {
+                const ratios = this.d && this.d.text_to_emoji_ratio;
+                if (!ratios || !ratios.length) return 0;
+                const max = Math.max(...ratios);
+                return max > 0 ? Math.round((ratios[i] / max) * 100) : 0;
+            },
+
+            sparkMembers() {
+                const dna = this.d && this.d.textual_dna_ranked;
+                if (!dna) return [];
+                return dna.filter(m => m.length_over_time && m.length_over_time.length > 1);
+            },
+
+            latFmt(m) {
+                if (m == null) return 'N/A';
+                const mins = Math.floor(m);
+                const secs = Math.round((m % 1) * 60);
+                return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+            },
+
+            // Duration formatter (STEP 6): <60s → "Ns", <1h → "Mm Ss", ≥1h → "Hh Mm".
+            formatDuration(seconds) {
+                if (seconds == null) return '—';
+                const s = Math.round(seconds);
+                if (s < 60) return `${s}s`;
+                if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
+                return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+            },
+
+            // Talk-time always as "Hh Mm" (total_duration_seconds).
+            formatTalkTime(seconds) {
+                const s = Math.round(seconds || 0);
+                return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+            },
+
+            // Per-person call rows, busiest caller first (for the "who calls more" tiles).
+            callPeople() {
+                const cs = this.d && this.d.call_stats;
+                if (!cs || !cs.calls_by_person) return [];
+                return Object.entries(cs.calls_by_person)
+                    .map(([name, rec]) => ({ name, ...rec }))
+                    .filter(p => p.initiated > 0)
+                    .sort((a, b) => b.initiated - a.initiated);
+            },
+
+            async init() {
+                this.d = {{ data|safe }};
+                if (!this.d) {
+                    window.location.href = '/';
+                    return;
+                }
+                // Keep an untouched copy so "All Time" can restore the full dataset.
+                this.originalData = JSON.parse(JSON.stringify(this.d));
+                this.totalMessages = this.d.total_messages || 0;
+                this.filteredMessagesCount = this.totalMessages;
+
+                this.deriveDisplay();
+
+                await this.$nextTick();
+                this.renderCharts(this.d);
+                this.bindThemeListener();
+                this.loading = false;
+            },
+
+            // Recompute the non-chart display values from the current `this.d`.
+            // Called on first load and after every filter so they stay in sync.
+            deriveDisplay() {
+                const d = this.d;
+                const hourCounts = (d.rhythm && d.rhythm.hour_counts) || [];
+                if (hourCounts.length === 24) {
+                    const peak = hourCounts.indexOf(Math.max(...hourCounts));
+                    const h = peak % 12 || 12;
+                    const ampm = peak < 12 ? 'am' : 'pm';
+                    this.peakHourText = `${h}:00 ${ampm}`;
+                    this.lateNightCount = hourCounts.slice(23).reduce((a, b) => a + b, 0)
+                        + hourCounts.slice(0, 4).reduce((a, b) => a + b, 0);
+                } else {
+                    this.peakHourText = '—';
+                    this.lateNightCount = 0;
+                }
+                this.midnightPct = d.midnight_index != null ? Math.round(d.midnight_index) : 0;
+            },
+
+            // ── Date filter (same controls/endpoint as dashboard.html) ──
+            setFilter(type) {
+                this.activeFilter = type;
+                if (type === 'all') {
+                    // Restore the full dataset locally — no server round-trip needed.
+                    this.applyData(JSON.parse(JSON.stringify(this.originalData)));
+                } else if (type === 'month') {
+                    this.filterByDateRange(this.getMonthRange());
+                } else if (type === 'week') {
+                    this.filterByDateRange(this.getWeekRange());
+                }
+                // 'custom' waits for the user to pick dates (applyCustomFilter).
+            },
+
+            getMonthRange() {
+                const now = dayjs();
+                return {
+                    start: now.startOf('month').format('YYYY-MM-DD'),
+                    end: now.endOf('month').format('YYYY-MM-DD')
+                };
+            },
+
+            getWeekRange() {
+                const now = dayjs();
+                return {
+                    start: now.startOf('week').format('YYYY-MM-DD'),
+                    end: now.endOf('week').format('YYYY-MM-DD')
+                };
+            },
+
+            setQuickDate(type) {
+                let start, end;
+                const now = dayjs();
+                if (type === 'last7days') {
+                    start = now.subtract(7, 'day').format('YYYY-MM-DD');
+                    end = now.format('YYYY-MM-DD');
+                } else if (type === 'last30days') {
+                    start = now.subtract(30, 'day').format('YYYY-MM-DD');
+                    end = now.format('YYYY-MM-DD');
+                } else if (type === 'last90days') {
+                    start = now.subtract(90, 'day').format('YYYY-MM-DD');
+                    end = now.format('YYYY-MM-DD');
+                } else if (type === 'yearToDate') {
+                    start = now.startOf('year').format('YYYY-MM-DD');
+                    end = now.format('YYYY-MM-DD');
+                }
+                this.customStartDate = start;
+                this.customEndDate = end;
+                this.activeFilter = 'custom';
+                this.filterByDateRange({ start, end });
+            },
+
+            applyCustomFilter() {
+                if (this.customStartDate && this.customEndDate) {
+                    this.filterByDateRange({ start: this.customStartDate, end: this.customEndDate });
+                }
+            },
+
+            clearCustomFilter() {
+                this.customStartDate = '';
+                this.customEndDate = '';
+                this.setFilter('all');
+            },
+
+            // POST the range to /filter/, which re-runs the real metric functions
+            // server-side and returns the full metrics dict (messages, media,
+            // textual DNA, call_stats, …). We swap it into `this.d` and re-render.
+            async filterByDateRange(range) {
+                this.filterLoading = true;
+                try {
+                    const resp = await fetch('/filter/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCookie('csrftoken'),
+                        },
+                        body: JSON.stringify({ date_from: range.start, date_to: range.end }),
+                    });
+                    const data = await resp.json();
+                    if (!resp.ok) {
+                        // Empty range / expired session — notify and keep current view.
+                        alert(data.error || 'Could not apply the date filter.');
+                        return;
+                    }
+                    this.applyData(data);
+                } catch (err) {
+                    alert('Could not apply the date filter. Please try again.');
+                } finally {
+                    this.filterLoading = false;
+                }
+            },
+
+            // Swap in a metrics dict and re-render every metric + chart.
+            applyData(data) {
+                this.d = data;
+                this.filteredMessagesCount = data.total_messages || 0;
+                this.deriveDisplay();
+                this.$nextTick(() => this.rerenderCharts());
+            },
+
+            // Destroy existing charts and rebuild from the current `this.d` so all
+            // sections (including call_stats) reflect the filtered data.
+            rerenderCharts() {
+                Object.values(this.charts || {}).forEach(c => { try { c.destroy(); } catch (_) {} });
+                this.charts = {};
+                this.renderCharts(this.d);
+            },
+
+            // Bind the theme-change handler once; it always reads the live charts.
+            bindThemeListener() {
+                if (this._themeBound) return;
+                this._themeBound = true;
+                window.addEventListener('theme-changed', () => {
+                    const ct2 = getChartTheme();
+                    Object.values(this.charts || {}).forEach(c => {
+                        try {
+                            c.updateOptions({
+                                theme: { mode: ct2.mode },
+                                grid: { borderColor: ct2.gridColor },
+                                colors: ct2.palette
+                            });
+                        } catch (_) {}
+                    });
+                });
+            },
+
+            renderCharts(d) {
+                const charts = {};
+                this.charts = charts;
+                const ct = getChartTheme();
+                const base = { toolbar: { show: false }, background: 'transparent' };
+                const hourCounts = (d.rhythm && d.rhythm.hour_counts) || [];
+
+                // 24-hour distribution chart
+                if (hourCounts.length === 24) {
+                    const labels = Array.from({ length: 24 }, (_, i) => {
+                        if (i === 0) return '12am';
+                        if (i === 12) return '12pm';
+                        return i < 12 ? `${i}am` : `${i - 12}pm`;
+                    });
+                    const colors = hourCounts.map((_, i) =>
+                        (i >= 23 || i < 4) ? ct.palette[1] : ct.palette[0]
+                    );
+                    charts.hourly = new ApexCharts(document.querySelector('#hourlyChart'), {
+                        chart: { ...base, type: 'bar', height: 220 },
+                        theme: { mode: ct.mode },
+                        grid: { borderColor: ct.gridColor },
+                        series: [{ name: 'Messages', data: hourCounts }],
+                        plotOptions: { bar: { distributed: true, columnWidth: '70%', borderRadius: 2 } },
+                        colors: colors,
+                        xaxis: {
+                            categories: labels,
+                            labels: { style: { fontSize: '10px' }, rotate: -45 }
+                        },
+                        legend: { show: false },
+                        dataLabels: { enabled: false },
+                        tooltip: { y: { formatter: v => v.toLocaleString() + ' msgs' } }
+                    });
+                    charts.hourly.render();
+                }
+
+                // 1v1: Text-to-Emoji Ratio bar chart
+                if (d.mode === '1v1' && d.text_to_emoji_ratio) {
+                    charts.ratio = new ApexCharts(document.querySelector('#ratioChart'), {
+                        chart: { ...base, type: 'bar', height: 140 },
+                        theme: { mode: ct.mode },
+                        grid: { borderColor: ct.gridColor },
+                        series: [{ name: 'Chars per emoji', data: d.text_to_emoji_ratio.map(r => Math.round(r)) }],
+                        plotOptions: { bar: { horizontal: true, distributed: true, barHeight: '50%', borderRadius: 3 } },
+                        colors: [ct.palette[0], ct.palette[1]],
+                        xaxis: { categories: d.participants, labels: { style: { fontSize: '12px' } } },
+                        legend: { show: false },
+                        dataLabels: { enabled: true, formatter: v => v + ':1' },
+                        tooltip: { y: { formatter: v => v + ' chars per emoji' } }
+                    });
+                    charts.ratio.render();
+                }
+
+                // 1v1: Initiation pie/donut
+                if (d.mode === '1v1' && d.initiation_counts) {
+                    charts.initiation = new ApexCharts(document.querySelector('#initiationChart'), {
+                        chart: { ...base, type: 'donut', height: 200 },
+                        theme: { mode: ct.mode },
+                        series: d.initiation_counts,
+                        labels: d.participants,
+                        colors: [ct.palette[0], ct.palette[1]],
+                        stroke: { show: false },
+                        legend: { position: 'bottom', fontSize: '12px' },
+                        plotOptions: { pie: { donut: { size: '55%' } } },
+                        dataLabels: { formatter: (val) => Math.round(val) + '%' }
+                    });
+                    charts.initiation.render();
+                }
+
+                // Group: Per-person sparklines
+                if (d.mode === 'group' && d.textual_dna_ranked) {
+                    d.textual_dna_ranked.forEach((member, i) => {
+                        if (!member.length_over_time || member.length_over_time.length < 2) return;
+                        const el = document.getElementById('spark-' + i);
+                        if (!el) return;
+                        const spark = new ApexCharts(el, {
+                            chart: { ...base, type: 'line', height: 48, sparkline: { enabled: true } },
+                            theme: { mode: ct.mode },
+                            series: [{ data: member.length_over_time.map(p => p[1]) }],
+                            colors: [ct.palette[i % ct.palette.length]],
+                            stroke: { curve: 'smooth', width: 1.5 },
+                            tooltip: {
+                                x: { formatter: (_, { dataPointIndex: di }) => member.length_over_time[di] ? member.length_over_time[di][0] : '' },
+                                y: { formatter: v => v + ' chars avg' }
+                            }
+                        });
+                        spark.render();
+                        charts['spark_' + i] = spark;
+                    });
+                }
+
+                // Group: Initiation horizontal bar
+                if (d.mode === 'group' && d.initiation_ranked && d.initiation_ranked.length > 0) {
+                    const initH = Math.max(160, d.initiation_ranked.length * 40);
+                    charts.groupInitiation = new ApexCharts(document.querySelector('#groupInitiationChart'), {
+                        chart: { ...base, type: 'bar', height: initH },
+                        theme: { mode: ct.mode },
+                        grid: { borderColor: ct.gridColor },
+                        series: [{ name: '% of starts', data: d.initiation_ranked.map(x => x.pct) }],
+                        plotOptions: { bar: { horizontal: true, distributed: true, barHeight: '60%', borderRadius: 3 } },
+                        colors: ct.palette,
+                        xaxis: { categories: d.initiation_ranked.map(x => x.name), labels: { style: { fontSize: '11px' } } },
+                        legend: { show: false },
+                        dataLabels: { enabled: true, formatter: v => v + '%' },
+                        tooltip: { y: { formatter: v => v + '% of conversation starts' } }
+                    });
+                    charts.groupInitiation.render();
+                }
+
+                // Call Analysis: calls-by-day and calls-by-hour bar charts
+                if (d.call_stats && d.call_stats.has_data) {
+                    const cs = d.call_stats;
+                    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+                    const dayData = dayNames.map(n => (cs.calls_by_day && cs.calls_by_day[n]) || 0);
+
+                    charts.callsByDay = new ApexCharts(document.querySelector('#callsByDayChart'), {
+                        chart: { ...base, type: 'bar', height: 220 },
+                        theme: { mode: ct.mode },
+                        grid: { borderColor: ct.gridColor },
+                        series: [{ name: 'Calls', data: dayData }],
+                        plotOptions: { bar: { columnWidth: '60%', borderRadius: 2 } },
+                        colors: [ct.palette[0]],
+                        xaxis: { categories: dayNames.map(n => n.slice(0, 3)), labels: { style: { fontSize: '11px' } } },
+                        legend: { show: false },
+                        dataLabels: { enabled: false },
+                        tooltip: { y: { formatter: v => v + (v === 1 ? ' call' : ' calls') } }
+                    });
+                    charts.callsByDay.render();
+
+                    const hourData = Array.from({ length: 24 }, (_, i) => (cs.calls_by_hour && cs.calls_by_hour[i]) || 0);
+                    const hourLabels = Array.from({ length: 24 }, (_, i) => {
+                        if (i === 0) return '12 AM';
+                        if (i === 12) return '12 PM';
+                        return i < 12 ? `${i} AM` : `${i - 12} PM`;
+                    });
+                    charts.callsByHour = new ApexCharts(document.querySelector('#callsByHourChart'), {
+                        chart: { ...base, type: 'bar', height: 220 },
+                        theme: { mode: ct.mode },
+                        grid: { borderColor: ct.gridColor },
+                        series: [{ name: 'Calls', data: hourData }],
+                        plotOptions: { bar: { columnWidth: '70%', borderRadius: 2 } },
+                        colors: [ct.palette[2]],
+                        xaxis: {
+                            categories: hourLabels,
+                            tickAmount: 8,
+                            labels: { style: { fontSize: '10px' }, rotate: -45, hideOverlappingLabels: true }
+                        },
+                        legend: { show: false },
+                        dataLabels: { enabled: false },
+                        tooltip: { y: { formatter: v => v + (v === 1 ? ' call' : ' calls') } }
+                    });
+                    charts.callsByHour.render();
+                }
+                // Theme re-coloring is handled once by bindThemeListener() (reads
+                // this.charts live), so re-renders don't stack duplicate listeners.
+            },
+
+            generateExport() {
+                this.exportLoading = true;
+                this.showExportModal = false;
+                this.$nextTick(() => {
+                    const mainEl = document.querySelector('main');
+                    const isDark = document.documentElement.className === 'dark';
+                    html2canvas(mainEl, {
+                        scale: 2,
+                        useCORS: true,
+                        allowTaint: false,
+                        backgroundColor: isDark ? '#131313' : '#fafaf9',
+                        logging: false,
+                        scrollY: -window.scrollY,
+                        windowWidth: document.documentElement.scrollWidth,
+                        windowHeight: document.documentElement.scrollHeight,
+                    }).then(canvas => {
+                        const link = document.createElement('a');
+                        link.download = 'chat-analytics.png';
+                        link.href = canvas.toDataURL('image/png');
+                        link.click();
+                        this.exportLoading = false;
+                    }).catch(() => { this.exportLoading = false; });
+                });
+            }
+        };
+    }
+</script>
+{% endblock %}

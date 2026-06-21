@@ -1,0 +1,17 @@
+# Environment / secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+
+# Django
+sessions/
+*.sqlite3
+
+# OS
+.DS_Store
+Thumbs.db

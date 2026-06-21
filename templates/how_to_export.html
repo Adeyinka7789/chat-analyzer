@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}How to Export Your WhatsApp Chat{% endblock %}
+
+{% block extra_head %}
+<style>
+    .platform-tab {
+        flex: 1;
+        background: transparent;
+        border: none;
+        padding: 0.625rem 1.5rem;
+        border-radius: 60px;
+        font-weight: 600;
+        cursor: pointer;
+        color: var(--on-surface-variant);
+        transition: all 0.2s;
+        font-family: 'Inter', sans-serif;
+        font-size: 0.9rem;
+    }
+    .platform-tab.active {
+        background: linear-gradient(135deg, var(--primary-fixed-dim), var(--primary-fixed));
+        color: var(--on-primary-fixed);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .step-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        padding: 0.875rem 0;
+        border-bottom: 1px solid var(--outline-variant);
+    }
+    .step-row:last-child { border-bottom: none; }
+    .step-num {
+        flex-shrink: 0;
+        width: 1.75rem;
+        height: 1.75rem;
+        border-radius: 50%;
+        background: rgba(var(--color-primary-fixed), 0.12);
+        color: var(--primary-fixed);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+    .note-box {
+        display: flex;
+        gap: 0.75rem;
+        align-items: flex-start;
+        background: rgba(var(--color-primary-fixed), 0.06);
+        border: 1px solid var(--outline-variant);
+        border-radius: 0.75rem;
+        padding: 1rem 1.25rem;
+        margin-top: 1.5rem;
+    }
+    .cta-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 2rem;
+        padding: 0.875rem 2.25rem;
+        border-radius: 40px;
+        font-weight: 600;
+        text-decoration: none;
+        background: linear-gradient(135deg, var(--primary-fixed-dim), var(--primary-fixed));
+        color: var(--on-primary-fixed);
+        transition: filter 0.2s;
+    }
+    .cta-btn:hover { filter: brightness(1.1); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-12 md:py-16" x-data="{ platform: 'android' }">
+
+    <!-- Heading -->
+    <div class="text-center mb-10">
+        <h1 class="font-headline-lg text-display-lg font-bold text-primary-fixed mb-3">How to Export Your WhatsApp Chat</h1>
+        <p class="text-on-surface-variant font-body-md">It takes less than 30 seconds. Follow the steps for your phone.</p>
+    </div>
+
+    <!-- Tab toggle -->
+    <div class="segmented-toggle flex gap-2 bg-surface-container-low rounded-full p-1 border border-outline-variant w-full max-w-xs mx-auto mb-8" style="display:flex">
+        <button class="platform-tab" :class="platform === 'android' ? 'active' : ''" @click="platform = 'android'">🤖 Android</button>
+        <button class="platform-tab" :class="platform === 'iphone' ? 'active' : ''" @click="platform = 'iphone'">🍎 iPhone</button>
+    </div>
+
+    <!-- Android steps -->
+    <div x-show="platform === 'android'" x-transition.opacity.duration.200ms class="glass-card rounded-xl p-6 md:p-8">
+        <h2 class="font-headline-lg text-lg text-on-surface mb-2">Android</h2>
+        <div>
+            <div class="step-row"><span class="step-num">1</span><p class="text-on-surface">Open WhatsApp and go to the chat you want to analyze</p></div>
+            <div class="step-row"><span class="step-num">2</span><p class="text-on-surface">Tap the three dots (⋮) in the top right</p></div>
+            <div class="step-row"><span class="step-num">3</span><p class="text-on-surface">Tap <strong>"More"</strong> → <strong>"Export chat"</strong></p></div>
+            <div class="step-row"><span class="step-num">4</span><p class="text-on-surface">Choose <strong>"Without Media"</strong> (the app only needs the text)</p></div>
+            <div class="step-row"><span class="step-num">5</span><p class="text-on-surface">Share the <strong>.txt</strong> file to yourself (via email, Google Drive, or any app)</p></div>
+            <div class="step-row"><span class="step-num">6</span><p class="text-on-surface">Upload that .txt file here</p></div>
+        </div>
+    </div>
+
+    <!-- iPhone steps -->
+    <div x-show="platform === 'iphone'" x-cloak x-transition.opacity.duration.200ms class="glass-card rounded-xl p-6 md:p-8">
+        <h2 class="font-headline-lg text-lg text-on-surface mb-2">iPhone</h2>
+        <div>
+            <div class="step-row"><span class="step-num">1</span><p class="text-on-surface">Open WhatsApp and go to the chat you want to analyze</p></div>
+            <div class="step-row"><span class="step-num">2</span><p class="text-on-surface">Tap the contact name or group name at the top</p></div>
+            <div class="step-row"><span class="step-num">3</span><p class="text-on-surface">Scroll down and tap <strong>"Export Chat"</strong></p></div>
+            <div class="step-row"><span class="step-num">4</span><p class="text-on-surface">Choose <strong>"Without Media"</strong></p></div>
+            <div class="step-row"><span class="step-num">5</span><p class="text-on-surface">Share the <strong>.zip</strong> or <strong>.txt</strong> file to yourself (via email, Files app, etc.)</p></div>
+            <div class="step-row"><span class="step-num">6</span><p class="text-on-surface">Upload that file here — both .zip and .txt are supported</p></div>
+        </div>
+    </div>
+
+    <!-- Note box -->
+    <div class="note-box">
+        <span class="material-symbols-outlined text-primary-fixed" style="font-size:20px">lock</span>
+        <p class="text-sm text-on-surface-variant leading-relaxed">
+            Works with both personal chats and group chats.
+            Your chat is analyzed in memory and automatically deleted after 1 hour.
+        </p>
+    </div>
+
+    <!-- CTA -->
+    <div class="text-center">
+        <a href="/" class="cta-btn">Upload Your Chat →</a>
+    </div>
+
+</div>
+{% endblock %}
