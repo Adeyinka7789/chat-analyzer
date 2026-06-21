@@ -7,6 +7,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import ensure_csrf_cookie
 from .parser import (
     parse_whatsapp_file,
+    detect_chat_type,
     compute_metrics,
     compute_1to1_metrics,
     compute_group_metrics,
@@ -85,25 +86,36 @@ def upload_and_analyze(request):
         except ValueError as exc:
             return JsonResponse({'error': str(exc)}, status=400)
 
-        messages, participants, media_breakdown, media_events, call_events = parse_whatsapp_file(content)
+        messages, participants, media_breakdown, media_events, call_events, system_events = parse_whatsapp_file(content)
         if len(messages) < 5:
             return JsonResponse(
                 {'error': 'Not enough messages to analyze (need at least 5).'},
                 status=400,
             )
 
-        metrics = compute_metrics(messages, participants, chat_type, media_breakdown, call_events)
+        # Auto-detect from the file itself; the user's toggle is only a hint and is
+        # intentionally ignored for the actual analysis path.
+        detected_type = detect_chat_type(messages, system_events)
+
+        metrics = compute_metrics(messages, participants, detected_type, media_breakdown, call_events)
         if metrics is None:
             return JsonResponse(
                 {'error': 'Could not identify at least two participants.'},
                 status=400,
             )
 
-        # Non-blocking notice when user declared 1v1 but chat has >2 participants
-        if chat_type == '1v1' and len(participants) > 2:
-            metrics['mode_warning'] = (
-                "This looks like a group chat — switch to Group view for per-person breakdowns."
-            )
+        # If detection overrode the user's selection, surface it (don't switch
+        # silently). These keys ride along in the metrics dict so the dashboard —
+        # which renders from the session, not this response — can show a notice.
+        if detected_type != chat_type:
+            detected_label = 'group' if detected_type == 'group' else '1-on-1'
+            metrics['type_mismatch'] = True
+            metrics['detected'] = detected_type
+            metrics['selected'] = chat_type
+            metrics['message'] = (
+                "We detected this is a {0} chat and analyzed it as one. "
+                "{1} analysis is now showing."
+            ).format(detected_label, detected_label.capitalize())
 
         # Privacy posture: the parsed messages (sender + timestamp + text) are kept
         # ONLY in the in-memory session (locmem cache, never written to disk) so the
@@ -111,7 +123,7 @@ def upload_and_analyze(request):
         # The session — and therefore this data — expires after SESSION_COOKIE_AGE
         # (1 hour). This is what the footer claim reflects.
         request.session['analysis'] = metrics
-        request.session['chat_type'] = chat_type
+        request.session['chat_type'] = detected_type
         request.session['parsed_messages'] = [
             {
                 'sender': m['sender'],

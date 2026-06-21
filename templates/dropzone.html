@@ -101,7 +101,8 @@
             <h1 class="font-headline-lg text-display-lg font-bold text-primary-fixed mb-2">Chat Insights Engine</h1>
             <p class="text-on-surface-variant font-body-md mb-8">Upload your WhatsApp chat export — no signup, no tracking.</p>
 
-            <div class="mb-8">
+            <div class="mb-8 opacity-70">
+                <p class="font-mono-label text-[11px] uppercase tracking-wider text-on-surface-variant mb-2">Chat type (we'll auto-detect):</p>
                 <div class="segmented-toggle">
                     <button class="toggle-option" :class="selectedMode === '1v1' ? 'active' : ''" @click="selectedMode = '1v1'">💬 Personal Chat (1v1)</button>
                     <button class="toggle-option" :class="selectedMode === 'group' ? 'active' : ''" @click="selectedMode = 'group'">👥 Group Hustle</button>

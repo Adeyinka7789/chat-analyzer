@@ -230,6 +230,17 @@
         </div>
         <div x-show="!loading" x-cloak>
 
+            <!-- Auto-detect notice (shown when detected type ≠ user's selection) -->
+            <div x-data="{ dismissed: false }" x-show="d && d.type_mismatch && !dismissed" x-cloak
+                 class="glass-card rounded-xl p-4 mb-gutter border-l-4 border-primary-fixed flex items-center gap-3">
+                <span class="text-xl">💡</span>
+                <p class="text-sm text-on-surface flex-1"
+                   x-text="'We detected this as a ' + (d.detected === 'group' ? 'group chat' : '1-on-1 chat') + ' and switched automatically.'"></p>
+                <button @click="dismissed = true" class="text-on-surface-variant hover:text-primary-fixed" aria-label="Dismiss notice">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+
             <!-- ── FILTER BAR ── -->
             <div class="glass-card p-4 md:p-6 rounded-xl mb-gutter">
                 <div class="flex flex-wrap items-center justify-between gap-4">
