@@ -137,9 +137,9 @@
 <div x-data="groupDashboard()" x-init="init()" x-cloak>
 
     <!-- Top nav -->
-    <nav class="fixed top-0 left-0 w-full z-50 flex items-center justify-between px-margin-desktop h-20 bg-surface/80 backdrop-blur-xl border-b border-outline-variant">
-        <span class="font-headline-lg text-headline-lg font-bold text-primary-fixed">Group Chat Engine</span>
-        <div class="flex items-center gap-4">
+    <nav class="fixed top-0 left-0 w-full z-50 flex items-center justify-between px-margin-mobile md:px-margin-desktop h-16 md:h-20 bg-surface/80 backdrop-blur-xl border-b border-outline-variant">
+        <span class="font-headline-lg text-lg md:text-headline-lg font-bold text-primary-fixed truncate mr-2">Group Chat Engine</span>
+        <div class="flex items-center gap-2 md:gap-4 flex-shrink-0">
             <a href="/analytics/" class="hidden md:flex items-center gap-2 px-4 py-2 rounded-full border border-outline-variant text-on-surface-variant hover:text-on-surface text-sm transition-colors">
                 <span class="material-symbols-outlined text-lg">bar_chart</span>
                 <span>Analytics</span>
@@ -161,7 +161,7 @@
         </div>
     </nav>
 
-    <main class="pt-28 pb-16 px-margin-desktop min-h-screen max-w-[1200px] mx-auto">
+    <main class="pt-20 md:pt-28 pb-16 px-margin-mobile md:px-margin-desktop min-h-screen max-w-[1200px] mx-auto">
 
         <div x-show="loading" class="glass-card p-8 text-center rounded-xl">
             <div class="animate-pulse text-primary-fixed">Loading group insights...</div>
@@ -178,10 +178,10 @@
             </template>
 
             <!-- Summary header -->
-            <header class="glass-card p-8 rounded-xl mb-gutter border-l-4 border-primary-fixed">
+            <header class="glass-card p-5 md:p-8 rounded-xl mb-gutter border-l-4 border-primary-fixed">
                 <div class="flex flex-col md:flex-row items-start md:items-center gap-6">
                     <div class="flex-1">
-                        <h1 class="font-display-lg text-display-lg mb-2 text-primary-fixed" x-text="'Group of ' + d.participants.length"></h1>
+                        <h1 class="font-display-lg text-headline-lg md:text-display-lg mb-2 text-primary-fixed" x-text="'Group of ' + d.participants.length"></h1>
                         <p class="text-on-surface-variant text-sm font-mono-label" x-text="d.total_messages.toLocaleString() + ' messages · ' + d.participants.length + ' participants'"></p>
                     </div>
                     <div class="flex flex-wrap gap-3">
@@ -196,7 +196,7 @@
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-gutter">
 
                 <!-- Volume Breakdown chart -->
-                <div class="glass-card p-6 rounded-xl lg:col-span-2">
+                <div class="glass-card p-4 md:p-6 rounded-xl lg:col-span-2">
                     <div class="flex justify-between items-center mb-6">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Volume Breakdown</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">bar_chart</span>
@@ -205,7 +205,7 @@
                 </div>
 
                 <!-- Power Dynamics (Who breaks the silence) -->
-                <div class="glass-card p-6 rounded-xl">
+                <div class="glass-card p-4 md:p-6 rounded-xl">
                     <div class="flex justify-between items-center mb-5">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Power Dynamics</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">balance</span>
@@ -227,7 +227,7 @@
                 </div>
 
                 <!-- Response Velocity -->
-                <div class="glass-card p-6 rounded-xl">
+                <div class="glass-card p-4 md:p-6 rounded-xl">
                     <div class="flex justify-between items-center mb-5">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Response Velocity</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">speed</span>
@@ -248,7 +248,7 @@
                 </div>
 
                 <!-- Activity Shift -->
-                <div class="glass-card p-6 rounded-xl">
+                <div class="glass-card p-4 md:p-6 rounded-xl">
                     <div class="flex justify-between items-center mb-5">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Most Active This Week</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">trending_up</span>
@@ -268,7 +268,7 @@
                 </div>
 
                 <!-- Double-texts -->
-                <div class="glass-card p-6 rounded-xl">
+                <div class="glass-card p-4 md:p-6 rounded-xl">
                     <div class="flex justify-between items-center mb-5">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Quick Follow-ups</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">repeat</span>
@@ -289,7 +289,7 @@
                 </div>
 
                 <!-- Sync Snapshot + Conversation Pulse -->
-                <div class="glass-card p-6 rounded-xl lg:col-span-2">
+                <div class="glass-card p-4 md:p-6 rounded-xl lg:col-span-2">
                     <div class="flex justify-between items-center mb-5">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Sync Snapshot</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">sync</span>
@@ -350,7 +350,7 @@
                 </div>
 
                 <!-- Group Pulse chart -->
-                <div class="glass-card p-6 rounded-xl lg:col-span-2">
+                <div class="glass-card p-4 md:p-6 rounded-xl lg:col-span-2">
                     <div class="flex justify-between items-center mb-6">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Group Pulse</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">show_chart</span>
@@ -359,7 +359,7 @@
                 </div>
 
                 <!-- Emoji Ratio -->
-                <div class="glass-card p-6 rounded-xl">
+                <div class="glass-card p-4 md:p-6 rounded-xl">
                     <div class="flex justify-between items-center mb-5">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Emoji Usage Ratio</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">mood</span>
@@ -377,7 +377,7 @@
                 </div>
 
                 <!-- Media Shared breakdown -->
-                <div class="glass-card p-6 rounded-xl" x-show="totalMediaShared() > 0">
+                <div class="glass-card p-4 md:p-6 rounded-xl" x-show="totalMediaShared() > 0">
                     <div class="flex justify-between items-center mb-5">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Media Shared</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">perm_media</span>
@@ -395,7 +395,7 @@
                 </div>
 
                 <!-- Textual DNA (ranked) -->
-                <div class="glass-card p-6 rounded-xl lg:col-span-2" x-show="d.textual_dna_ranked && d.textual_dna_ranked.length > 0">
+                <div class="glass-card p-4 md:p-6 rounded-xl lg:col-span-2" x-show="d.textual_dna_ranked && d.textual_dna_ranked.length > 0">
                     <div class="flex justify-between items-center mb-5">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Textual DNA</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">genetics</span>
@@ -427,7 +427,7 @@
                 </div>
 
                 <!-- Conversation Rhythm -->
-                <div class="glass-card p-6 rounded-xl lg:col-span-2" x-show="d.rhythm">
+                <div class="glass-card p-4 md:p-6 rounded-xl lg:col-span-2" x-show="d.rhythm">
                     <div class="flex justify-between items-center mb-5">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Conversation Rhythm</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">calendar_month</span>
@@ -450,7 +450,7 @@
                 </div>
 
                 <!-- AI Insight Callouts -->
-                <div class="glass-card p-6 rounded-xl lg:col-span-2" x-show="d.insights && d.insights.length > 0">
+                <div class="glass-card p-4 md:p-6 rounded-xl lg:col-span-2" x-show="d.insights && d.insights.length > 0">
                     <div class="flex items-center gap-2 mb-5">
                         <span class="material-symbols-outlined text-primary-fixed" style="font-variation-settings:'FILL' 1">auto_awesome</span>
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Pattern Detected</h2>
@@ -468,7 +468,7 @@
             </div>
 
             <!-- ── Memorable Moments (Phase C3) ── -->
-            <div class="glass-card p-6 rounded-xl mt-gutter" x-show="d.memorable_moments" x-cloak>
+            <div class="glass-card p-4 md:p-6 rounded-xl mt-gutter" x-show="d.memorable_moments" x-cloak>
                 <div class="flex items-center gap-2 mb-1">
                     <span class="text-2xl">✨</span>
                     <h2 class="font-headline-lg text-xl text-primary-fixed">Memorable Moments</h2>

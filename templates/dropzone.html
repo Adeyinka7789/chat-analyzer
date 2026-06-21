@@ -45,6 +45,12 @@
         border-color: var(--primary-fixed) !important;
         background: rgba(var(--color-primary-fixed), 0.05) !important;
     }
+    .dropzone-filled {
+        border-style: solid !important;
+        border-color: var(--primary-fixed) !important;
+        background: rgba(var(--color-primary-fixed), 0.05) !important;
+        cursor: default;
+    }
     #analyzeBtn {
         margin-top: 2rem;
         border: none;
@@ -103,14 +109,35 @@
             </div>
 
             <div id="dropzone"
-                 :class="dragOver ? 'dropzone-highlight' : ''"
-                 @click="$refs.fileInput.click()"
+                 :class="selectedFile ? 'dropzone-filled' : (dragOver ? 'dropzone-highlight' : '')"
+                 @click="!selectedFile && $refs.fileInput.click()"
                  @dragover.prevent="dragOver = true"
                  @dragleave="dragOver = false"
                  @drop.prevent="dragOver = false; handleDrop($event)">
-                <p style="font-size:3rem">📁</p>
-                <p>Drop your WhatsApp export here (.txt or .zip)</p>
-                <p class="hint">or click to select</p>
+
+                <!-- Empty state -->
+                <template x-if="!selectedFile">
+                    <div>
+                        <p style="font-size:3rem">📁</p>
+                        <p>Drop your WhatsApp export here (.txt or .zip)</p>
+                        <p class="hint">or click to select</p>
+                    </div>
+                </template>
+
+                <!-- File selected state -->
+                <template x-if="selectedFile">
+                    <div>
+                        <p style="font-size:3rem">✅</p>
+                        <p class="font-bold !text-primary-fixed break-all" x-text="selectedFile.name"></p>
+                        <p class="hint">Ready to analyze</p>
+                        <button type="button"
+                                @click.stop="removeFile()"
+                                class="mt-3 text-sm text-on-surface-variant hover:text-primary-fixed underline">
+                            ✕ Remove
+                        </button>
+                    </div>
+                </template>
+
                 <input type="file" x-ref="fileInput" accept=".txt,.zip" hidden @change="handleSelect($event)">
             </div>
 
@@ -251,6 +278,13 @@ function analyzeFlow() {
             }
             this.selectedFile = file;
             this.btnLabel = 'Analyze Chat ⚡';
+        },
+
+        removeFile() {
+            this.selectedFile = null;
+            this.btnLabel = 'Awaiting File...';
+            // Clear the native input so re-selecting the same file re-fires @change
+            this.$refs.fileInput.value = '';
         },
 
         async startAnalysis() {

@@ -118,26 +118,34 @@
     }
     /* ── Memorable Moments (Phase C3) ── */
     .mm-scroll {
-        display: grid;
-        grid-auto-flow: column;
-        grid-auto-columns: 80%;
-        gap: 1rem;
+        display: flex;
+        flex-wrap: nowrap;
         overflow-x: auto;
         scroll-snap-type: x mandatory;
-        scrollbar-width: none;          /* Firefox */
-        -ms-overflow-style: none;       /* old Edge */
-        padding-bottom: 0.5rem;
+        -webkit-overflow-scrolling: touch;
+        gap: 12px;
+        padding-bottom: 12px;            /* room for scrollbar */
+        scrollbar-width: none;           /* Firefox */
+        -ms-overflow-style: none;        /* old Edge */
     }
     .mm-scroll::-webkit-scrollbar { display: none; }   /* Chrome/Safari */
     @media (min-width: 768px) {
         .mm-scroll {
-            grid-auto-flow: row;
+            display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
-            grid-auto-columns: auto;
+            gap: 1rem;
             overflow-x: visible;
+            padding-bottom: 0;
+        }
+        .mm-card {
+            min-width: 0;
+            max-width: none;
         }
     }
     .mm-card {
+        min-width: 260px;
+        max-width: 260px;
+        flex-shrink: 0;
         scroll-snap-align: start;
         background: var(--surface-container-low);
         border: 1px solid var(--outline-variant);
@@ -178,15 +186,16 @@
 {% block content %}
 <div x-data="dashboardState()" x-init="init()" x-cloak>
     <!-- Top nav -->
-    <nav class="fixed top-0 left-0 w-full z-50 flex items-center justify-between px-margin-desktop h-20 bg-surface/80 backdrop-blur-xl border-b border-outline-variant shadow-[0_0_40px_rgba(var(--color-primary-fixed),0.1)]">
-        <span class="font-headline-lg text-headline-lg font-bold text-primary-fixed">Contextual Chat Engine</span>
-        <div class="flex items-center gap-4">
-            <button @click="window.open('/card/', '_blank')" class="flex items-center gap-2 px-6 py-2 rounded-full border border-primary-fixed text-primary-fixed font-bold text-sm hover:bg-primary-fixed/10 transition-all active:scale-95">
-                <span>✨ Share Card</span>
+    <nav class="fixed top-0 left-0 w-full z-50 flex items-center justify-between px-margin-mobile md:px-margin-desktop h-16 md:h-20 bg-surface/80 backdrop-blur-xl border-b border-outline-variant shadow-[0_0_40px_rgba(var(--color-primary-fixed),0.1)]">
+        <span class="font-headline-lg text-lg md:text-headline-lg font-bold text-primary-fixed truncate mr-2">Contextual Chat Engine</span>
+        <div class="flex items-center gap-2 md:gap-4 flex-shrink-0">
+            <button @click="window.open('/card/', '_blank')" aria-label="Share Card" class="flex items-center gap-2 px-3 md:px-6 py-2 rounded-full border border-primary-fixed text-primary-fixed font-bold text-sm hover:bg-primary-fixed/10 transition-all active:scale-95 whitespace-nowrap">
+                <span class="md:hidden">✨</span>
+                <span class="hidden md:inline">✨ Share Card</span>
             </button>
-            <button @click="showExportModal = true" class="hidden md:flex items-center gap-2 px-6 py-2 rounded-full bg-primary-fixed text-on-primary-fixed font-bold text-sm hover:brightness-110 transition-all active:scale-95">
+            <button @click="showExportModal = true" aria-label="Export Report" class="flex items-center gap-2 px-3 md:px-6 py-2 rounded-full bg-primary-fixed text-on-primary-fixed font-bold text-sm hover:brightness-110 transition-all active:scale-95">
                 <span class="material-symbols-outlined text-lg">download</span>
-                <span>Export Report</span>
+                <span class="hidden md:inline">Export Report</span>
             </button>
             <button onclick="toggleTheme()" class="text-on-surface-variant hover:text-primary-fixed transition-colors" aria-label="Toggle theme">
                 <span class="material-symbols-outlined" id="themeIcon">light_mode</span>
@@ -209,14 +218,14 @@
     </aside>
 
     <!-- Main content -->
-    <main class="md:ml-64 pt-28 pb-12 px-margin-desktop min-h-screen">
+    <main class="md:ml-64 pt-20 md:pt-28 pb-12 px-margin-mobile md:px-margin-desktop min-h-screen">
         <div class="glass-card p-8 text-center rounded-xl" x-show="loading" x-cloak>
             <div class="animate-pulse text-primary-fixed">Loading insights...</div>
         </div>
         <div x-show="!loading" x-cloak>
 
             <!-- ── FILTER BAR ── -->
-            <div class="glass-card p-6 rounded-xl mb-gutter">
+            <div class="glass-card p-4 md:p-6 rounded-xl mb-gutter">
                 <div class="flex flex-wrap items-center justify-between gap-4">
                     <div class="flex flex-wrap gap-2">
                         <button @click="setFilter('all')" :class="{'active': activeFilter === 'all'}" class="filter-chip">📅 All Time</button>
@@ -225,11 +234,11 @@
                         <button @click="setFilter('custom')" :class="{'active': activeFilter === 'custom'}" class="filter-chip">🎯 Custom Range</button>
                     </div>
                     
-                    <div x-show="activeFilter === 'custom'" class="date-range-picker flex gap-2 items-center" x-transition.duration.200ms>
-                        <input type="date" x-model="customStartDate" @change="applyCustomFilter" class="bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm">
-                        <span>→</span>
-                        <input type="date" x-model="customEndDate" @change="applyCustomFilter" class="bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm">
-                        <button @click="clearCustomFilter" class="text-on-surface-variant hover:text-primary-fixed">✕</button>
+                    <div x-show="activeFilter === 'custom'" class="date-range-picker flex flex-col sm:flex-row gap-2 sm:items-center w-full sm:w-auto" x-transition.duration.200ms>
+                        <input type="date" x-model="customStartDate" @change="applyCustomFilter" class="w-full sm:w-auto bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm">
+                        <span class="hidden sm:inline">→</span>
+                        <input type="date" x-model="customEndDate" @change="applyCustomFilter" class="w-full sm:w-auto bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm">
+                        <button @click="clearCustomFilter" class="self-end sm:self-auto text-on-surface-variant hover:text-primary-fixed">✕</button>
                     </div>
                     
                     <div class="filter-stats" x-show="filteredMessagesCount !== totalMessages">
@@ -256,7 +265,7 @@
             </div>
 
             <!-- ── Sync Snapshot with Health Score ── -->
-            <header class="glass-card p-8 rounded-xl mb-gutter border-l-4 border-primary-fixed">
+            <header class="glass-card p-5 md:p-8 rounded-xl mb-gutter border-l-4 border-primary-fixed">
                 <div class="flex items-center gap-2 mb-3">
                     <span class="material-symbols-outlined text-primary-fixed">sync</span>
                     <h1 class="font-headline-lg text-xl text-primary-fixed">Sync Snapshot</h1>
@@ -313,7 +322,7 @@
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-gutter">
 
                 <!-- Volume Split -->
-                <div class="glass-card p-6 rounded-xl col-span-1">
+                <div class="glass-card p-4 md:p-6 rounded-xl col-span-1">
                     <div class="flex justify-between items-center mb-6">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">The Volume Split</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">pie_chart</span>
@@ -323,7 +332,7 @@
                 </div>
 
                 <!-- Response Velocity -->
-                <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-2">
+                <div class="glass-card p-4 md:p-6 rounded-xl col-span-1 lg:col-span-2">
                     <div class="flex justify-between items-center mb-6">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Response Velocity</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">speed</span>
@@ -342,7 +351,7 @@
                 </div>
 
                 <!-- Word Battle Arena -->
-                <div class="glass-card p-6 rounded-xl col-span-1">
+                <div class="glass-card p-4 md:p-6 rounded-xl col-span-1">
                     <div class="flex justify-between items-center mb-5">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Word Battle Arena</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">sports_mma</span>
@@ -378,7 +387,7 @@
                 </div>
 
                 <!-- Power Dynamics -->
-                <div class="glass-card p-6 rounded-xl col-span-1">
+                <div class="glass-card p-4 md:p-6 rounded-xl col-span-1">
                     <div class="flex justify-between items-center mb-5">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Power Dynamics</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">balance</span>
@@ -425,7 +434,7 @@
                 </div>
 
                 <!-- Conversation Sessions -->
-                <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-3">
+                <div class="glass-card p-4 md:p-6 rounded-xl col-span-1 lg:col-span-3">
                     <div class="flex justify-between items-center mb-5">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Conversation Sessions</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">forum</span>
@@ -481,12 +490,12 @@
                 </div>
 
                 <!-- Textual DNA -->
-                <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-2">
+                <div class="glass-card p-4 md:p-6 rounded-xl col-span-1 lg:col-span-2">
                     <div class="flex justify-between items-center mb-5">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Textual DNA</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">genetics</span>
                     </div>
-                    <div class="grid grid-cols-2 gap-6">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
                         <div>
                             <p class="font-mono-label text-xs text-primary-fixed uppercase tracking-wider border-b border-outline-variant pb-2 mb-3" x-text="participant1"></p>
                             <dl class="space-y-2 text-sm">
@@ -515,12 +524,12 @@
                 </div>
 
                 <!-- Emoji Grid -->
-                <div class="glass-card p-6 rounded-xl">
+                <div class="glass-card p-4 md:p-6 rounded-xl">
                     <div class="flex justify-between items-center mb-6">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">The Emoji Grid</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">mood</span>
                     </div>
-                    <div class="grid grid-cols-2 gap-8">
+                    <div class="grid grid-cols-2 gap-4 md:gap-8">
                         <div>
                             <span class="font-mono-label text-xs block mb-4 border-b border-outline-variant pb-2" x-text="participant1.toUpperCase() + ' TOP 5'"></span>
                             <ul id="emojiGridP1" class="space-y-4"></ul>
@@ -533,7 +542,7 @@
                 </div>
 
                 <!-- Media Breakdown -->
-                <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-3" x-show="d.media_breakdown">
+                <div class="glass-card p-4 md:p-6 rounded-xl col-span-1 lg:col-span-3" x-show="d.media_breakdown">
                     <div class="flex justify-between items-center mb-5">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Media Breakdown</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">perm_media</span>
@@ -584,7 +593,7 @@
                 </div>
 
                 <!-- Conversation Rhythm -->
-                <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-2">
+                <div class="glass-card p-4 md:p-6 rounded-xl col-span-1 lg:col-span-2">
                     <div class="flex justify-between items-center mb-5">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Conversation Rhythm</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">calendar_month</span>
@@ -622,7 +631,7 @@
                 </div>
 
                 <!-- Chronological Activity -->
-                <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-3">
+                <div class="glass-card p-4 md:p-6 rounded-xl col-span-1 lg:col-span-3">
                     <div class="flex justify-between items-center mb-6">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Chronological Activity</h2>
                         <div class="flex gap-2">
@@ -648,7 +657,7 @@
                 </div>
 
                 <!-- Emotional Intelligence -->
-                <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-2">
+                <div class="glass-card p-4 md:p-6 rounded-xl col-span-1 lg:col-span-2">
                     <div class="flex justify-between items-center mb-5">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Emotional Intelligence</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">psychology_alt</span>
@@ -670,7 +679,7 @@
                 </div>
 
                 <!-- Contextual Anomalies -->
-                <div class="glass-card p-6 rounded-xl col-span-1">
+                <div class="glass-card p-4 md:p-6 rounded-xl col-span-1">
                     <div class="flex justify-between items-center mb-8">
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Contextual Anomalies</h2>
                         <span class="material-symbols-outlined text-on-surface-variant">report_problem</span>
@@ -704,7 +713,7 @@
                 </div>
 
                 <!-- AI Insight Callouts -->
-                <div class="glass-card p-6 rounded-xl col-span-1 lg:col-span-3" x-show="d.insights && d.insights.length > 0">
+                <div class="glass-card p-4 md:p-6 rounded-xl col-span-1 lg:col-span-3" x-show="d.insights && d.insights.length > 0">
                     <div class="flex items-center gap-2 mb-5">
                         <span class="material-symbols-outlined text-primary-fixed" style="font-variation-settings:'FILL' 1">auto_awesome</span>
                         <h2 class="font-headline-lg text-xl text-primary-fixed">Pattern Detected</h2>
@@ -722,7 +731,7 @@
             </div>
 
             <!-- ── Memorable Moments (Phase C3) ── -->
-            <div class="glass-card p-6 rounded-xl mt-gutter" x-show="d.memorable_moments" x-cloak>
+            <div class="glass-card p-4 md:p-6 rounded-xl mt-gutter" x-show="d.memorable_moments" x-cloak>
                 <div class="flex items-center gap-2 mb-1">
                     <span class="text-2xl">✨</span>
                     <h2 class="font-headline-lg text-xl text-primary-fixed">Memorable Moments</h2>
@@ -787,6 +796,7 @@
                         <span class="mm-context" x-text="d.memorable_moments?.fastest_reply?.sender + ' → ' + d.memorable_moments?.fastest_reply?.to_whom + ' · ' + d.memorable_moments?.fastest_reply?.date_label"></span>
                     </div>
                 </div>
+                <p class="text-xs text-on-surface-variant md:hidden mt-2" style="text-align:center">← Swipe to see more moments →</p>
             </div>
         </div>
 
@@ -1190,7 +1200,8 @@
                     series: [d.message_counts[0], d.message_counts[1]],
                     labels: [d.participants[0], d.participants[1]],
                     colors: [ct.palette[0], ct.palette[1]],
-                    legend: { position: 'bottom' }
+                    legend: { position: 'bottom' },
+                    responsive: [{ breakpoint: 768, options: { chart: { height: 280 } } }]
                 });
                 charts.volumeSplit.render();
 
@@ -1229,7 +1240,8 @@
                     chart: { ...base, type: 'area', height: 300 },
                     series: [{ name: d.participants[0], data: d.hourly_A }, { name: d.participants[1], data: d.hourly_B }],
                     colors: [ct.palette[0], ct.palette[1]],
-                    xaxis: { categories: Array.from({ length: 24 }, (_, i) => i + ':00') }
+                    xaxis: { categories: Array.from({ length: 24 }, (_, i) => i + ':00') },
+                    responsive: [{ breakpoint: 768, options: { chart: { height: 260 } } }]
                 });
                 charts.chronological.render();
 
