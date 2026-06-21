@@ -84,14 +84,16 @@
 {% endblock %}
 
 {% block site_header %}{% endblock %}
-{% block site_footer %}{% endblock %}
 
 {% block content %}
 <div x-data="analyticsState()" x-init="init()" x-cloak>
 
     <!-- Top nav -->
     <nav class="fixed top-0 left-0 w-full z-50 flex items-center justify-between px-margin-desktop h-20 bg-surface/80 backdrop-blur-xl border-b border-outline-variant shadow-[0_0_40px_rgba(var(--color-primary-fixed),0.1)]">
-        <span class="font-headline-lg text-headline-lg font-bold text-primary-fixed">Contextual Chat Engine</span>
+        <span class="font-headline-lg text-headline-lg font-bold text-primary-fixed">
+            <span class="md:hidden">CIE</span>
+            <span class="hidden md:inline">Chat Insights Engine</span>
+        </span>
         <div class="flex items-center gap-4">
             <button @click="showExportModal = true" class="hidden md:flex items-center gap-2 px-6 py-2 rounded-full bg-primary-fixed text-on-primary-fixed font-bold text-sm hover:brightness-110 transition-all active:scale-95">
                 <span class="material-symbols-outlined text-lg">download</span>
