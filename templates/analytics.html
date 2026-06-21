@@ -80,6 +80,57 @@
         margin-top: 4px;
     }
     .ratio-bar-fill { height: 100%; border-radius: 4px; }
+
+    /* ── Word Cloud ── */
+    .wc-tabs {
+        display: flex;
+        gap: 0.5rem;
+        overflow-x: auto;
+        padding-bottom: 0.5rem;
+        margin-bottom: 1rem;
+        scrollbar-width: thin;
+        -webkit-overflow-scrolling: touch;
+    }
+    .wc-tab {
+        flex: 0 0 auto;
+        padding: 0.4rem 0.9rem;
+        border-radius: 2rem;
+        background: var(--surface-container-high);
+        color: var(--on-surface-variant);
+        font-size: 0.8125rem;
+        font-weight: 500;
+        cursor: pointer;
+        white-space: nowrap;
+        border: 1px solid transparent;
+        transition: all 0.2s ease;
+    }
+    .wc-tab.active {
+        background: var(--primary-fixed);
+        color: var(--on-primary-fixed);
+    }
+    .wc-tab:hover:not(.active) { background: var(--surface-container-highest); }
+    .wc-cloud {
+        position: relative;
+        width: 100%;
+        height: 380px;
+        overflow: hidden;
+    }
+    @media (max-width: 640px) {
+        .wc-cloud { height: 300px; }
+    }
+    .wc-empty {
+        color: var(--on-surface-variant);
+        font-size: 0.875rem;
+        text-align: center;
+        padding-top: 120px;
+    }
+    .wc-insight {
+        margin-top: 1rem;
+        font-size: 0.875rem;
+        color: var(--on-surface-variant);
+        text-align: center;
+    }
+    .wc-accent { color: var(--primary-fixed); font-weight: 600; }
 </style>
 {% endblock %}
 
@@ -425,6 +476,28 @@
 
             </div>
 
+            <!-- ── 🔤 Word Cloud ── -->
+            <section class="mt-gutter" x-show="hasWordCloud()" x-cloak>
+                <div class="glass-card p-6 rounded-xl">
+                    <div class="flex justify-between items-center mb-2">
+                        <h2 class="font-headline-lg text-xl text-primary-fixed">Word Cloud</h2>
+                        <span class="material-symbols-outlined text-on-surface-variant">cloud</span>
+                    </div>
+                    <p class="text-xs text-on-surface-variant font-mono-label mb-5 uppercase tracking-wider">Most used words — stopwords removed</p>
+
+                    <!-- Tabs: per person (1v1) or Everyone + each member (group) -->
+                    <div class="wc-tabs">
+                        <template x-for="tab in wcTabs()" :key="tab.key">
+                            <button class="wc-tab" :class="wcActive === tab.key ? 'active' : ''" @click="setWcTab(tab.key)" x-text="tab.label"></button>
+                        </template>
+                    </div>
+
+                    <div id="wordCloud" class="wc-cloud"></div>
+
+                    <p class="wc-insight" x-show="wcInsight()" x-html="wcInsight()"></p>
+                </div>
+            </section>
+
             <!-- ── 📞 Call Analysis (hidden when the export has no calls) ── -->
             <section class="mt-gutter" x-show="d.call_stats && d.call_stats.has_data" x-cloak>
                 <div class="flex items-center gap-2 mb-gutter mt-2">
@@ -601,6 +674,9 @@
             lateNightCount: 0,
             midnightPct: 0,
 
+            // Word cloud: which tab (participant name, or '__overall__') is shown
+            wcActive: null,
+
             // Date filter state (mirrors dashboard.html)
             filterLoading: false,
             activeFilter: 'all',
@@ -676,6 +752,199 @@
                     .sort((a, b) => b.initiated - a.initiated);
             },
 
+            // ── Word cloud helpers ──
+
+            // Minimal HTML escape — only wcInsight() uses x-html, and participant
+            // names are user-supplied. (Words are [a-z0-9] only, already safe.)
+            esc(s) {
+                return String(s).replace(/[&<>"']/g, c =>
+                    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            },
+
+            hasWordCloud() {
+                const wf = this.d && this.d.word_frequencies;
+                if (!wf) return false;
+                const tabs = this.wcTabs();
+                return tabs.some(t => this.wcWordsFor(t.key).length > 0);
+            },
+
+            // Tabs: group → "Everyone" + each member; 1v1 → each participant.
+            wcTabs() {
+                const wf = this.d && this.d.word_frequencies;
+                if (!wf) return [];
+                const tabs = [];
+                if (wf.overall && wf.overall.length) {
+                    tabs.push({ key: '__overall__', label: 'Everyone' });
+                }
+                (this.d.participants || []).forEach(name => {
+                    tabs.push({ key: name, label: name });
+                });
+                return tabs;
+            },
+
+            wcWordsFor(key) {
+                const wf = this.d && this.d.word_frequencies;
+                if (!wf) return [];
+                if (key === '__overall__') return wf.overall || [];
+                return (wf.per_participant && wf.per_participant[key]) || [];
+            },
+
+            wcWords() {
+                return this.wcWordsFor(this.wcActive);
+            },
+
+            setWcTab(key) {
+                this.wcActive = key;
+                this.$nextTick(() => this.renderWordCloud());
+            },
+
+            wcInsight() {
+                const words = this.wcWords();
+                if (!words.length) return '';
+                const top = words[0];
+                const name = this.wcActive === '__overall__' ? 'The group' : this.wcActive;
+                const times = top.count === 1 ? 'time' : 'times';
+                return `${this.esc(name)}'s most used word is `
+                    + `<span class="wc-accent">${this.esc(top.word)}</span> — `
+                    + `said ${top.count} ${times}.`;
+            },
+
+            // Force-based random word cloud — try random spots, reject overlaps.
+            buildWordCloud(words, containerId) {
+                const container = document.getElementById(containerId);
+                if (!container) return;
+                const W = container.offsetWidth;
+                const H = container.offsetHeight || 320;
+                container.style.position = 'relative';
+                container.innerHTML = '';
+                container.style.height = H + 'px';
+
+                if (!words || words.length === 0) {
+                    container.innerHTML = '<p class="wc-empty">Not enough words to build a cloud yet.</p>';
+                    return;
+                }
+
+                const maxCount = words[0].count;
+                const minCount = words[words.length - 1].count;
+
+                // Font size: 13px to 42px
+                const fontSize = (count) => {
+                    if (maxCount === minCount) return 24;
+                    return Math.round(13 + ((count - minCount) /
+                           (maxCount - minCount)) * 29);
+                };
+
+                // Color palette — more variety
+                const colors = [
+                    '#5EEAD4',  // jade (top words)
+                    '#34D399',  // emerald
+                    '#60A5FA',  // blue
+                    '#F472B6',  // pink
+                    '#FBBF24',  // amber
+                    '#A78BFA',  // purple
+                    '#FB923C',  // orange
+                    '#ffffff',  // white
+                    '#9ca3af',  // muted (filler words)
+                ];
+
+                const getColor = (index, count) => {
+                    if (index === 0) return colors[0]; // top word always jade
+                    if (index < 3) return colors[1];
+                    if (index < 8) return colors[Math.floor(Math.random() * 6) + 1];
+                    return colors[7];
+                };
+
+                const placed = [];
+
+                const overlaps = (x, y, w, h) => {
+                    for (const p of placed) {
+                        if (x < p.x + p.w + 8 && x + w + 8 > p.x &&
+                            y < p.y + p.h + 6 && y + h + 6 > p.y) return true;
+                    }
+                    return false;
+                };
+
+                words.forEach((item, index) => {
+                    const span = document.createElement('span');
+                    const fs = fontSize(item.count);
+                    span.textContent = item.word;
+                    span.style.cssText = `
+                        position: absolute;
+                        font-size: ${fs}px;
+                        font-weight: ${index < 5 ? '700' : index < 15 ? '600' : '400'};
+                        color: ${getColor(index, item.count)};
+                        cursor: pointer;
+                        white-space: nowrap;
+                        transition: transform 0.2s;
+                        user-select: none;
+                    `;
+                    span.title = `${item.word}: used ${item.count} times`;
+                    span.addEventListener('mouseenter', () =>
+                        span.style.transform = 'scale(1.15)');
+                    span.addEventListener('mouseleave', () =>
+                        span.style.transform = 'scale(1)');
+                    span.addEventListener('click', () => {
+                        this.showTooltip(span, `"${item.word}" — said ${item.count} times`);
+                    });
+
+                    container.appendChild(span);
+                    const w = span.offsetWidth;
+                    const h = span.offsetHeight;
+
+                    // Try random positions, find one that doesn't overlap
+                    let placed_flag = false;
+                    for (let attempt = 0; attempt < 200; attempt++) {
+                        const x = Math.random() * Math.max(1, W - w - 10) + 5;
+                        const y = Math.random() * Math.max(1, H - h - 10) + 5;
+                        if (!overlaps(x, y, w, h)) {
+                            span.style.left = x + 'px';
+                            span.style.top = y + 'px';
+                            placed.push({ x, y, w, h });
+                            placed_flag = true;
+                            break;
+                        }
+                    }
+                    // If couldn't place without overlap after 200 tries,
+                    // place anyway at a random edge position
+                    if (!placed_flag) {
+                        const x = Math.random() * Math.max(1, W - w - 10) + 5;
+                        const y = Math.random() * Math.max(1, H - h - 10) + 5;
+                        span.style.left = x + 'px';
+                        span.style.top = y + 'px';
+                        placed.push({ x, y, w, h });
+                    }
+                });
+            },
+
+            showTooltip(el, text) {
+                // Remove existing tooltip
+                document.querySelectorAll('.wc-tooltip').forEach(t => t.remove());
+                const tip = document.createElement('div');
+                tip.className = 'wc-tooltip';
+                tip.textContent = text;
+                tip.style.cssText = `
+                    position: fixed;
+                    background: #1f2937;
+                    color: #5EEAD4;
+                    padding: 6px 12px;
+                    border-radius: 6px;
+                    font-size: 13px;
+                    pointer-events: none;
+                    z-index: 9999;
+                    border: 1px solid #5EEAD4;
+                `;
+                document.body.appendChild(tip);
+                const r = el.getBoundingClientRect();
+                tip.style.left = r.left + 'px';
+                tip.style.top = (r.top - 36) + 'px';
+                setTimeout(() => tip.remove(), 2000);
+            },
+
+            renderWordCloud() {
+                if (!this.hasWordCloud()) return;
+                this.buildWordCloud(this.wcWords(), 'wordCloud');
+            },
+
             async init() {
                 this.d = {{ data|safe }};
                 if (!this.d) {
@@ -712,6 +981,13 @@
                     this.lateNightCount = 0;
                 }
                 this.midnightPct = d.midnight_index != null ? Math.round(d.midnight_index) : 0;
+
+                // Default word-cloud tab (first available); reset if the active tab
+                // disappeared after a filter (e.g. a participant fell out of range).
+                const wcTabs = this.wcTabs();
+                if (!wcTabs.some(t => t.key === this.wcActive)) {
+                    this.wcActive = wcTabs.length ? wcTabs[0].key : null;
+                }
             },
 
             // ── Date filter (same controls/endpoint as dashboard.html) ──
@@ -992,6 +1268,10 @@
                     });
                     charts.callsByHour.render();
                 }
+                // Word cloud (pure DOM, not ApexCharts) — render after the section
+                // is in the DOM so the container has a measurable width.
+                this.renderWordCloud();
+
                 // Theme re-coloring is handled once by bindThemeListener() (reads
                 // this.charts live), so re-renders don't stack duplicate listeners.
             },
